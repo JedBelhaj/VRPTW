@@ -1,0 +1,40 @@
+{
+	"mode": "benchmark",
+	"instance": "R105",
+	"seed": 0,
+	"initial_methods": [
+		"greedy",
+		"solomon",
+		"clarke_wright",
+		"random",
+		"sweep"
+	],
+	"single_run": {
+		"init_method": "solomon",
+		"use_tabu": true
+	},
+	"tabu": {
+		"enabled": true,
+		"iterations": 120,
+		"tabu_tenure": 12,
+		"aspiration": true,
+		"diversification_interval": 25,
+		"intensification_interval": 20,
+		"per_operator_moves": 40,
+		"operators": [
+			"relocate",
+			"swap",
+			"two_opt_intra",
+			"two_opt_inter",
+			"or_opt",
+			"cross_exchange"
+		]
+	},
+	"benchmark": {
+		"enabled": true,
+		"all_operator_combinations": true,
+		"max_operator_combo_size": 3,
+		"run_tabu": true,
+		"output_csv": true
+	}
+}
