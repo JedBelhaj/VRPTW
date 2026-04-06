@@ -47,6 +47,9 @@ def generate_two_opt_inter_moves(problem: ProblemInstance, routes: List[List[int
                     cand1 = route1[:i] + route2[j:]
                     cand2 = route2[:j] + route1[i:]
 
+                    if (cand1 == route1 and cand2 == route2) or (cand1 == route2 and cand2 == route1):
+                        continue
+
                     if cand1[-1] != problem.depot_id:
                         cand1.append(problem.depot_id)
                     if cand2[-1] != problem.depot_id:
