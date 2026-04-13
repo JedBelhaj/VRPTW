@@ -125,6 +125,8 @@ def tabu_search(
                 "operators": operators,
                 "active_tabu_tenure": active_tabu_tenure,
                 "elapsed_sec": 0.0,
+                "current_routes": clone_routes(current),
+                "best_routes": clone_routes(best),
             }
         )
 
@@ -189,6 +191,8 @@ def tabu_search(
                         "candidate_count": len(candidates),
                         "active_tabu_tenure": active_tabu_tenure,
                         "elapsed_sec": time.perf_counter() - search_start,
+                        "current_routes": clone_routes(current),
+                        "best_routes": clone_routes(best),
                     }
                 )
             continue
@@ -269,6 +273,8 @@ def tabu_search(
                     "active_tabu_tenure": active_tabu_tenure,
                     "selection_mode": selection_mode,
                     "elapsed_sec": time.perf_counter() - search_start,
+                    "current_routes": clone_routes(current),
+                    "best_routes": clone_routes(best),
                     "candidate_rows": top_candidate_rows if extra_verbose else None,
                     "tabu_entries": (
                         [
@@ -372,6 +378,7 @@ def run_tabu_from_method(
     apply_fleet_repair: bool = True,
     extra_verbose: bool = False,
     print_iterations: bool = True,
+    iteration_callback: Optional[Callable[[Dict], None]] = None,
     tenure_increase_step: int = 2,
     max_tabu_tenure: Optional[int] = None,
     stagnation_top_k: int = 5,
@@ -417,6 +424,16 @@ def run_tabu_from_method(
         f"Starting tabu from {method} | init_distance={distance:.2f} | routes={len(routes)} | init_time={init_elapsed:.3f}s"
     )
 
+    callback: Optional[Callable[[Dict], None]] = None
+    if print_iterations or iteration_callback is not None:
+        def _dispatch(payload: Dict):
+            if print_iterations:
+                _print_tabu_iteration(payload)
+            if iteration_callback is not None:
+                iteration_callback(payload)
+
+        callback = _dispatch
+
     best_routes, best_cost = tabu_search(
         problem=problem,
         initial_routes=routes,
@@ -427,7 +444,7 @@ def run_tabu_from_method(
         intensification_interval=intensification_interval,
         per_operator_moves=per_operator_moves,
         enabled_operators=enabled_operators,
-        iteration_callback=_print_tabu_iteration if print_iterations else None,
+        iteration_callback=callback,
         apply_fleet_repair=apply_fleet_repair,
         random_seed=seed,
         extra_verbose=extra_verbose,
