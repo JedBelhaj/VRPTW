@@ -16,23 +16,26 @@ from utils.pyvrp_validator import compare_solution_with_pyvrp
 ALL_METHODS = ["greedy", "solomon", "clarke_wright", "random", "sweep"]
 
 # Hardcoded settings
-INSTANCE = "RC201"
+INSTANCE = "R108"
 SEED = 0
+# init method only testing
 INIT_METHOD = "skip"  # "skip" to skip "all" or one of: greedy, solomon, clarke_wright, random, sweep
 RUN_DATASET_METHOD_AVERAGE = False
 RUN_INIT_BENCHMARK = False
-RUN_TABU_BENCHMARK = True
-TABU_BENCHMARK_PRINT_ITERATIONS = False
-APPLY_FLEET_REPAIR = True
-USE_PYVRP_VALIDATOR = True
+RUN_TABU_BENCHMARK = False
+TABU_BENCHMARK_PRINT_ITERATIONS = True
+
+APPLY_FLEET_REPAIR = True # repair vehicle number
+USE_PYVRP_VALIDATOR = False # cross check
 PYVRP_DISTANCE_TOLERANCE = 1e-2
+
 RUN_TABU = True
 TABU_START_METHOD = "solomon"
 TABU_ITERATIONS = 100
-TABU_TENURE = 15
-TABU_ASPIRATION = True
-TABU_DIVERSIFICATION_INTERVAL = 35
-TABU_INTENSIFICATION_INTERVAL = 15
+TABU_TENURE = 15 # how long does a move stay tabu
+TABU_ASPIRATION = True # Allows tabu moves if they improve the best solution.
+TABU_DIVERSIFICATION_INTERVAL = 35 # If no improvement for this many iterations, diversify by resetting to a different initial solution.
+TABU_INTENSIFICATION_INTERVAL = 15 # Every 15 iterations → focus search around best solutions found.
 TABU_PER_OPERATOR_MOVES = 80
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
 TABU_EXTRA_VERBOSE = False
@@ -84,7 +87,16 @@ def _write_benchmark_csv(output_csv: str, rows: List[dict]):
     output_path = Path(output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:
-        fieldnames = list(rows[0].keys()) if rows else []
+        fieldnames: List[str] = []
+        if rows:
+            # Combined benchmark rows may come from init and tabu stages with different keys.
+            # Build a stable union of keys to avoid DictWriter field mismatch errors.
+            seen = set()
+            for row in rows:
+                for key in row.keys():
+                    if key not in seen:
+                        seen.add(key)
+                        fieldnames.append(key)
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         if rows:
             writer.writeheader()
