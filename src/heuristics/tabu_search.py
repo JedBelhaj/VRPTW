@@ -2,71 +2,12 @@ import random
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from heuristics.helpers import clean_routes, generate_candidates, is_inter_route_move, total_distance
 from init.methods import get_initial_methods
 from models.problem import ProblemInstance
-from operators.cross_exchange import generate_cross_exchange_moves
+from operators.improvement import destroy_smallest_route_regret_reinsert
 from operators.move_types import MoveCandidate
-from operators.or_opt import generate_or_opt_moves
-from operators.relocate import generate_relocation_moves
-from operators.swap import generate_swap_moves
-from operators.two_opt import generate_two_opt_inter_moves, generate_two_opt_intra_moves
 from utils.checker import clone_routes, evaluate_solution, maybe_repair_to_vehicle_limit
-
-
-def _clean_routes(problem: ProblemInstance, routes: List[List[int]]) -> List[List[int]]:
-    return [route for route in routes if len(route) > 2 and route[0] == problem.depot_id and route[-1] == problem.depot_id]
-
-
-def _total_distance(problem: ProblemInstance, routes: List[List[int]]) -> float:
-    feasible, total, _ = evaluate_solution(problem, routes)
-    if not feasible:
-        return float("inf")
-    return total
-
-
-def _operator_generators():
-    return {
-        "relocate": generate_relocation_moves,
-        "swap": generate_swap_moves,
-        "two_opt_intra": generate_two_opt_intra_moves,
-        "two_opt_inter": generate_two_opt_inter_moves,
-        "or_opt": generate_or_opt_moves,
-        "cross_exchange": generate_cross_exchange_moves,
-    }
-
-
-def _is_inter_route_move(move_key: Tuple) -> bool:
-    if not move_key:
-        return False
-
-    operator = move_key[0]
-    if operator in ("swap", "two_opt_inter", "cross_exchange"):
-        return True
-    if operator in ("relocate", "or_opt") and len(move_key) >= 4:
-        return move_key[2] != move_key[3]
-    return False
-
-
-def _generate_candidates(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    per_operator: int,
-    enabled_operators: List[str],
-) -> List[MoveCandidate]:
-    candidates: List[MoveCandidate] = []
-    generators = _operator_generators()
-
-    for operator in enabled_operators:
-        if operator not in generators:
-            continue
-        candidates.extend(generators[operator](problem, routes, max_moves=per_operator))
-
-    for cand in candidates:
-        cand.routes = _clean_routes(problem, cand.routes)
-        cand.objective = _total_distance(problem, cand.routes)
-
-    candidates.sort(key=lambda c: c.objective)
-    return [c for c in candidates if c.objective < float("inf")]
 
 
 def tabu_search(
@@ -87,16 +28,19 @@ def tabu_search(
     max_tabu_tenure: Optional[int] = None,
     stagnation_top_k: int = 5,
     perturbation_moves: int = 3,
+    enable_improvement_operator: bool = True,
+    improvement_interval: int = 30,
+    regret_k: int = 2,
 ) -> Tuple[List[List[int]], float]:
     rng = random.Random(random_seed)
     search_start = time.perf_counter()
 
     current, _ = maybe_repair_to_vehicle_limit(
         problem,
-        _clean_routes(problem, clone_routes(initial_routes)),
+        clean_routes(problem, clone_routes(initial_routes)),
         apply_fleet_repair=apply_fleet_repair,
     )
-    current_cost = _total_distance(problem, current)
+    current_cost = total_distance(problem, current)
     best = clone_routes(current)
     best_cost = current_cost
 
@@ -131,7 +75,59 @@ def tabu_search(
         )
 
     for it in range(1, iterations + 1):
-        candidates = _generate_candidates(
+        periodic_improvement_attempted = False
+        periodic_improvement_applied = False
+
+        # On configured multiples (e.g., 30/60/90), run improvement operator only.
+        if enable_improvement_operator and improvement_interval > 0 and it % improvement_interval == 0:
+            periodic_improvement_attempted = True
+            event = "improvement_regret_reinsert_checked"
+            selection_mode = "improvement_only"
+
+            improved_routes, improved = destroy_smallest_route_regret_reinsert(
+                problem,
+                current,
+                regret_k=regret_k,
+            )
+            if improved:
+                improved_cost = total_distance(problem, improved_routes)
+                if improved_cost < current_cost:
+                    periodic_improvement_applied = True
+                    current = improved_routes
+                    current_cost = improved_cost
+                    event = "improvement_regret_reinsert"
+                    if current_cost < best_cost:
+                        best = clone_routes(current)
+                        best_cost = current_cost
+                        no_improve = 0
+                        active_tabu_tenure = base_tabu_tenure
+                else:
+                    no_improve += 1
+            else:
+                no_improve += 1
+
+            if iteration_callback:
+                iteration_callback(
+                    {
+                        "iteration": it,
+                        "event": event,
+                        "move_key": [],
+                        "move_objective": None,
+                        "tabu_until": None,
+                        "current_cost": current_cost,
+                        "best_cost": best_cost,
+                        "candidate_count": 0,
+                        "tabu_size": len(tabu),
+                        "active_tabu_tenure": active_tabu_tenure,
+                        "selection_mode": selection_mode,
+                        "periodic_improvement_attempted": periodic_improvement_attempted,
+                        "periodic_improvement_applied": periodic_improvement_applied,
+                        "elapsed_sec": time.perf_counter() - search_start,
+                    }
+                )
+            continue
+
+        candidates = generate_candidates(
             problem,
             current,
             per_operator=per_operator_moves,
@@ -170,17 +166,18 @@ def tabu_search(
         top_candidate_rows = candidate_rows[:3]
 
         if chosen is None:
-            # Diversification by restart from a random feasible constructor.
+            # Diversification fallback by restart from a random feasible constructor.
             methods = get_initial_methods(seed=rng.randint(0, 10_000))
             restart_routes, _ = maybe_repair_to_vehicle_limit(
                 problem,
-                _clean_routes(problem, methods["random"](problem)),
+                clean_routes(problem, methods["random"](problem)),
                 apply_fleet_repair=apply_fleet_repair,
             )
-            restart_cost = _total_distance(problem, restart_routes)
+            restart_cost = total_distance(problem, restart_routes)
             current = restart_routes
             current_cost = restart_cost
             no_improve += 1
+
             if iteration_callback:
                 iteration_callback(
                     {
@@ -190,6 +187,8 @@ def tabu_search(
                         "best_cost": best_cost,
                         "candidate_count": len(candidates),
                         "active_tabu_tenure": active_tabu_tenure,
+                        "periodic_improvement_attempted": periodic_improvement_attempted,
+                        "periodic_improvement_applied": periodic_improvement_applied,
                         "elapsed_sec": time.perf_counter() - search_start,
                         "current_routes": clone_routes(current),
                         "best_routes": clone_routes(best),
@@ -219,7 +218,7 @@ def tabu_search(
             perturb_applied = False
 
             for _ in range(max(1, perturbation_moves)):
-                perturb_candidates = _generate_candidates(
+                perturb_candidates = generate_candidates(
                     problem,
                     perturbed,
                     per_operator=max(10, per_operator_moves // 2),
@@ -228,7 +227,7 @@ def tabu_search(
                 if not perturb_candidates:
                     break
 
-                inter_route = [cand for cand in perturb_candidates if _is_inter_route_move(cand.move_key)]
+                inter_route = [cand for cand in perturb_candidates if is_inter_route_move(cand.move_key)]
                 pool = inter_route if inter_route else perturb_candidates
                 top_k = max(1, min(stagnation_top_k, len(pool)))
                 picked = pool[rng.randrange(top_k)]
@@ -236,17 +235,17 @@ def tabu_search(
                 perturb_applied = True
 
             if perturb_applied:
-                current = _clean_routes(problem, perturbed)
-                current_cost = _total_distance(problem, current)
+                current = clean_routes(problem, perturbed)
+                current_cost = total_distance(problem, current)
                 event = "diversification_perturbation"
             else:
                 methods = get_initial_methods(seed=rng.randint(0, 10_000))
                 current, _ = maybe_repair_to_vehicle_limit(
                     problem,
-                    _clean_routes(problem, methods["random"](problem)),
+                    clean_routes(problem, methods["random"](problem)),
                     apply_fleet_repair=apply_fleet_repair,
                 )
-                current_cost = _total_distance(problem, current)
+                current_cost = total_distance(problem, current)
                 event = "diversification_restart"
 
             no_improve = 0
@@ -272,6 +271,8 @@ def tabu_search(
                     "tabu_size": len(tabu),
                     "active_tabu_tenure": active_tabu_tenure,
                     "selection_mode": selection_mode,
+                    "periodic_improvement_attempted": periodic_improvement_attempted,
+                    "periodic_improvement_applied": periodic_improvement_applied,
                     "elapsed_sec": time.perf_counter() - search_start,
                     "current_routes": clone_routes(current),
                     "best_routes": clone_routes(best),
@@ -334,6 +335,8 @@ def _print_tabu_iteration(payload: Dict):
     elapsed_sec = payload.get("elapsed_sec")
     active_tabu_tenure = payload.get("active_tabu_tenure")
     selection_mode = payload.get("selection_mode")
+    periodic_improvement_attempted = payload.get("periodic_improvement_attempted", False)
+    periodic_improvement_applied = payload.get("periodic_improvement_applied", False)
 
     if isinstance(move_key, list) and move_key:
         move_label = str(move_key[0])
@@ -351,6 +354,8 @@ def _print_tabu_iteration(payload: Dict):
         extra.append(f"tenure={active_tabu_tenure}")
     if selection_mode:
         extra.append(f"sel={selection_mode}")
+    if periodic_improvement_attempted:
+        extra.append(f"impr={'applied' if periodic_improvement_applied else 'checked'}")
 
     extra_text = f" | {' | '.join(extra)}" if extra else ""
     print(
@@ -383,6 +388,9 @@ def run_tabu_from_method(
     max_tabu_tenure: Optional[int] = None,
     stagnation_top_k: int = 5,
     perturbation_moves: int = 3,
+    enable_improvement_operator: bool = True,
+    improvement_interval: int = 30,
+    regret_k: int = 2,
 ) -> Dict[str, Any]:
     overall_start = time.perf_counter()
     problem = _get_problem(instance)
@@ -452,6 +460,9 @@ def run_tabu_from_method(
         max_tabu_tenure=max_tabu_tenure,
         stagnation_top_k=stagnation_top_k,
         perturbation_moves=perturbation_moves,
+        enable_improvement_operator=enable_improvement_operator,
+        improvement_interval=improvement_interval,
+        regret_k=regret_k,
     )
 
     feasible, distance, message = evaluate_solution(problem, best_routes)

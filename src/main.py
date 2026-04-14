@@ -16,7 +16,7 @@ from utils.pyvrp_validator import compare_solution_with_pyvrp
 ALL_METHODS = ["greedy", "solomon", "clarke_wright", "random", "sweep"]
 
 # Hardcoded settings
-INSTANCE = "R108"
+INSTANCE = "C201"
 SEED = 0
 # init method only testing
 INIT_METHOD = "skip"  # "skip" to skip "all" or one of: greedy, solomon, clarke_wright, random, sweep
@@ -25,8 +25,8 @@ RUN_INIT_BENCHMARK = False
 RUN_TABU_BENCHMARK = False
 TABU_BENCHMARK_PRINT_ITERATIONS = True
 
-APPLY_FLEET_REPAIR = True # repair vehicle number
-USE_PYVRP_VALIDATOR = False # cross check
+APPLY_FLEET_REPAIR = False # repair vehicle number
+USE_PYVRP_VALIDATOR = True # cross check
 PYVRP_DISTANCE_TOLERANCE = 1e-2
 
 RUN_TABU = True
@@ -39,6 +39,9 @@ TABU_INTENSIFICATION_INTERVAL = 15 # Every 15 iterations → focus search around
 TABU_PER_OPERATOR_MOVES = 80
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
 TABU_EXTRA_VERBOSE = False
+ENABLE_IMPROVEMENT_OPERATOR = True
+IMPROVEMENT_INTERVAL = 30 # run on exact iteration multiples: 30, 60, 90, ...
+IMPROVEMENT_REGRET_K = 2
 
 
 def _get_problem(instance: str):
@@ -205,6 +208,9 @@ def run_tabu_benchmark(instance: str, seed: int, print_iterations: bool = False)
             apply_fleet_repair=APPLY_FLEET_REPAIR,
             extra_verbose=TABU_EXTRA_VERBOSE,
             print_iterations=print_iterations,
+            enable_improvement_operator=ENABLE_IMPROVEMENT_OPERATOR,
+            improvement_interval=IMPROVEMENT_INTERVAL,
+            regret_k=IMPROVEMENT_REGRET_K,
         )
 
         init_routes = row.pop("init_routes", None)
@@ -430,6 +436,9 @@ def main():
             per_operator_moves=TABU_PER_OPERATOR_MOVES,
             enabled_operators=TABU_OPERATORS,
             apply_fleet_repair=APPLY_FLEET_REPAIR,
+            enable_improvement_operator=ENABLE_IMPROVEMENT_OPERATOR,
+            improvement_interval=IMPROVEMENT_INTERVAL,
+            regret_k=IMPROVEMENT_REGRET_K,
         )
 
 
