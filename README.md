@@ -199,7 +199,26 @@ Before optimization, initial routes can be passed through fleet repair:
 - If route count exceeds fleet size, try reinserting customers from one route into others.
 - If successful, route count is reduced.
 
-### 6.5 End-to-end algorithm logic
+### 6.5 Periodic improvement operator: destroy smallest route + regret insertion
+
+In addition to neighborhood moves, tabu_search.py now applies a periodic improvement operator every 30 iterations by default.
+
+Logic:
+
+- Select the route with the fewest customers.
+- Remove that route and collect its customers.
+- Reinsert customers using regret insertion (k=2 by default):
+  - For each pending customer, compute best and second-best feasible insertion delta cost.
+  - Regret = second_best - best.
+  - Insert the customer with maximum regret first.
+- Accept the rebuilt solution only if it improves current_cost.
+
+Why this helps:
+
+- It is less myopic than simple greedy reinsertion.
+- It prioritizes difficult customers early, which is effective for VRPTW feasibility and quality.
+
+### 6.6 End-to-end algorithm logic
 
 The runtime logic can be read as a two-stage pipeline:
 
@@ -257,7 +276,7 @@ Detailed flow:
 - Return best_routes and best_cost.
 - Re-evaluate with checker for final feasibility and consistent distance.
 
-### 6.6 Why this design works
+### 6.7 Why this design works
 
 The method balances exploration and exploitation:
 
@@ -272,7 +291,7 @@ In short:
 - Tabu memory prevents short cycles.
 - Diversification avoids long stagnation plateaus.
 
-### 6.7 Pseudocode-level view
+### 6.8 Pseudocode-level view
 
 Initialization phase:
 
@@ -456,6 +475,9 @@ Tabu parameters:
 - TABU_PER_OPERATOR_MOVES
 - TABU_OPERATORS
 - TABU_EXTRA_VERBOSE
+- ENABLE_IMPROVEMENT_OPERATOR
+- IMPROVEMENT_INTERVAL (for example 30 means iterations 30, 60, 90, ...)
+- IMPROVEMENT_REGRET_K
 
 Validation and repair:
 
