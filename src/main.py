@@ -2,6 +2,7 @@ from typing import List
 import csv
 import json
 import time
+import itertools
 from datetime import datetime
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from utils.pyvrp_validator import compare_solution_with_pyvrp
 ALL_METHODS = ["greedy", "solomon", "clarke_wright", "random", "sweep"]
 
 # Hardcoded settings
-INSTANCE = "C201"
+INSTANCE = ["R108", "C108", "RC108"] #changed for experimental purposes
 SEED = 0
 # init method only testing
 INIT_METHOD = "skip"  # "skip" to skip "all" or one of: greedy, solomon, clarke_wright, random, sweep
@@ -30,18 +31,20 @@ USE_PYVRP_VALIDATOR = True # cross check
 PYVRP_DISTANCE_TOLERANCE = 1e-2
 
 RUN_TABU = True
-TABU_START_METHOD = "solomon"
+TABU_START_METHOD = "random"
 TABU_ITERATIONS = 100
-TABU_TENURE = 15 # how long does a move stay tabu
+TABU_TENURE = [5, 15, 30] #changed for exploration purposes # how long does a move stay tabu
 TABU_ASPIRATION = True # Allows tabu moves if they improve the best solution.
-TABU_DIVERSIFICATION_INTERVAL = 35 # If no improvement for this many iterations, diversify by resetting to a different initial solution.
-TABU_INTENSIFICATION_INTERVAL = 15 # Every 15 iterations → focus search around best solutions found.
+TABU_DIVERSIFICATION_INTERVAL = [10, 20] #changed for exploration purposes # If no improvement for this many iterations, diversify by resetting to a different initial solution.
+TABU_INTENSIFICATION_INTERVAL = [30, 50] #changed for exploration purposes # Every 15 iterations → focus search around best solutions found. #improvement funct?
 TABU_PER_OPERATOR_MOVES = 80
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
 TABU_EXTRA_VERBOSE = False
 ENABLE_IMPROVEMENT_OPERATOR = True
 IMPROVEMENT_INTERVAL = 30 # run on exact iteration multiples: 30, 60, 90, ...
 IMPROVEMENT_REGRET_K = 2
+
+START_METHODS = ["greedy", "solomon", "random"] # added for exploration purposes
 
 
 def _get_problem(instance: str):
@@ -405,23 +408,83 @@ def run_initial_solutions(instance: str, seed: int, method: str):
         _run_single_initial(problem, methods, name)
 
 
+def run_hyperparameter_sweep():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sweep_results_csv = f"results/vprtw_sensitivity_analysis_{timestamp}.csv"
+    
+    # Generate all possible combinations
+    combinations = list(itertools.product(
+        TABU_TENURE, 
+        TABU_INTENSIFICATION_INTERVAL, 
+        TABU_DIVERSIFICATION_INTERVAL,
+        START_METHODS,
+        INSTANCE
+    ))
+    
+    all_sweep_rows = []
+    total_configs = len(combinations)
+    
+    print(f"Starting sweep: {total_configs} configurations found.")
+
+    for i, (tenure, intens, divers, method, instance) in enumerate(combinations, 1):
+        print(f"[{i}/{total_configs}] Testing: Tenure={tenure}, Intens={intens}, Divers={divers}, Method={method}, Instance = {instance}")
+        
+        # Call the existing tabu_run_tabu_from_method with the current loop variables
+        row = tabu_run_tabu_from_method(
+            instance=instance,
+            seed=SEED,
+            method=method,
+            iterations=TABU_ITERATIONS,
+            tabu_tenure=tenure,
+            aspiration=TABU_ASPIRATION,
+            diversification_interval=divers,
+            intensification_interval=intens,
+            per_operator_moves=TABU_PER_OPERATOR_MOVES,
+            enabled_operators=TABU_OPERATORS,
+            apply_fleet_repair=APPLY_FLEET_REPAIR,
+            extra_verbose=False,
+            print_iterations=False,
+        )
+
+        init_dist = row["init_distance"]
+        final_dist = row["tabu_distance"]
+
+        improvement = (init_dist - final_dist) / init_dist if init_dist > 0 else 0.0
+
+        row.update({
+            "improvement_ratio": improvement,
+            "gap": final_dist - init_dist
+        })
+        
+        # Inject the hyperparameter values into the result row for CSV logging
+        row.update({
+            "param_tenure": tenure,
+            "param_intensification": intens,
+            "param_diversification": divers,
+            "param_method": method,
+            "instance": instance
+        })
+        
+        all_sweep_rows.append(row)
+
+    # Save everything to one file
+    _write_benchmark_csv(sweep_results_csv, all_sweep_rows)
+    print(f"\nSweep complete! Data saved to: {sweep_results_csv}")
+
+
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     benchmark_output_csv = f"results/benchmark_{INSTANCE}_{timestamp}.csv"
 
-    if RUN_DATASET_METHOD_AVERAGE:
-        run_dataset_method_average(seed=SEED, output_prefix=f"results/method_average_{timestamp}")
-        return
+    RUN_SWEEP = True
 
-    if RUN_INIT_BENCHMARK or RUN_TABU_BENCHMARK:
-        run_combined_benchmark(
-            instance=INSTANCE,
-            seed=SEED,
-            output_csv=benchmark_output_csv,
-            print_iterations=TABU_BENCHMARK_PRINT_ITERATIONS,
-        )
+    if RUN_SWEEP:
+        run_hyperparameter_sweep()
 
-    run_initial_solutions(instance=INSTANCE, seed=SEED, method=INIT_METHOD)
+    else:
+        if RUN_DATASET_METHOD_AVERAGE:
+            run_dataset_method_average(seed=SEED, output_prefix=f"results/method_average_{timestamp}")
+            return
 
     if RUN_TABU and not RUN_TABU_BENCHMARK:
         tabu_run_tabu_from_method(
