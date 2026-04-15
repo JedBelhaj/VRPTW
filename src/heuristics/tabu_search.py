@@ -123,6 +123,8 @@ def tabu_search(
                         "periodic_improvement_attempted": periodic_improvement_attempted,
                         "periodic_improvement_applied": periodic_improvement_applied,
                         "elapsed_sec": time.perf_counter() - search_start,
+                        "current_routes": clone_routes(current),
+                        "best_routes": clone_routes(best),
                     }
                 )
             continue

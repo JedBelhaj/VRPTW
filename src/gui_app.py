@@ -98,6 +98,9 @@ class App(tk.Tk):
         self.div_interval_var = tk.StringVar(value="35")
         self.int_interval_var = tk.StringVar(value="15")
         self.per_op_moves_var = tk.StringVar(value="80")
+        self.enable_improvement_operator_var = tk.BooleanVar(value=True)
+        self.improvement_interval_var = tk.StringVar(value="30")
+        self.improvement_regret_k_var = tk.StringVar(value="2")
         self.show_iteration_details_var = tk.BooleanVar(value=True)
 
         self.operator_vars: dict[str, tk.BooleanVar] = {
@@ -130,12 +133,20 @@ class App(tk.Tk):
 
         ttk.Checkbutton(
             left,
+            text="Enable improvement operator",
+            variable=self.enable_improvement_operator_var,
+        ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        self._row(left, 13, "Improvement interval", ttk.Entry(left, textvariable=self.improvement_interval_var))
+        self._row(left, 14, "Improvement regret_k", ttk.Entry(left, textvariable=self.improvement_regret_k_var))
+
+        ttk.Checkbutton(
+            left,
             text="Show iteration details",
             variable=self.show_iteration_details_var,
-        ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        ).grid(row=15, column=0, columnspan=2, sticky="w", pady=(6, 2))
 
         ops_frame = ttk.Frame(left, style="Panel.TFrame")
-        ops_frame.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ops_frame.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Label(ops_frame, text="Tabu operators", style="Field.TLabel").grid(row=0, column=0, sticky="w")
 
         for idx, name in enumerate(TABU_OPERATORS, start=1):
@@ -147,8 +158,8 @@ class App(tk.Tk):
             )
 
         self.run_button = ttk.Button(left, text="Run", command=self._run_clicked)
-        self.run_button.grid(row=14, column=0, sticky="ew", pady=(12, 0))
-        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=14, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
+        self.run_button.grid(row=17, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=17, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
 
         self.status_var = tk.StringVar(value="Ready")
         status_row = ttk.Frame(right, style="Panel.TFrame")
@@ -331,6 +342,9 @@ class App(tk.Tk):
             "diversification_interval": int(self.div_interval_var.get()),
             "intensification_interval": int(self.int_interval_var.get()),
             "per_operator_moves": int(self.per_op_moves_var.get()),
+            "enable_improvement_operator": self.enable_improvement_operator_var.get(),
+            "improvement_interval": int(self.improvement_interval_var.get()),
+            "improvement_regret_k": int(self.improvement_regret_k_var.get()),
             "enabled_operators": [name for name, enabled in self.operator_vars.items() if enabled.get()],
             "show_iteration_details": self.show_iteration_details_var.get(),
         }
@@ -417,6 +431,9 @@ class App(tk.Tk):
             apply_fleet_repair=config["apply_fleet_repair"],
             print_iterations=False,
             iteration_callback=ui_iteration_callback,
+            enable_improvement_operator=config["enable_improvement_operator"],
+            improvement_interval=config["improvement_interval"],
+            regret_k=config["improvement_regret_k"],
         )
 
         lines = [
@@ -652,7 +669,7 @@ class App(tk.Tk):
                 latest_iter_payload.get("current_routes")
                 or latest_iter_payload.get("routes")
                 or latest_iter_payload.get("best_routes")
-                or []
+                or self._current_routes
             )
             event = str(latest_iter_payload.get("event", "iter"))
             move_key = latest_iter_payload.get("move_key")
