@@ -3,10 +3,8 @@ import time
 
 from heuristics.helpers import clean_routes, generate_candidates, is_inter_route_move, total_distance
 from init.methods import get_initial_methods
-from models.problem import ProblemInstance
 from operators.improvement import destroy_smallest_route_regret_reinsert
-from operators.move_types import MoveCandidate
-from utils.checker import clone_routes, evaluate_solution, maybe_repair_to_vehicle_limit
+from utils.checker import clone_routes, evaluate_solution
 
 
 def tabu_search(
@@ -20,9 +18,7 @@ def tabu_search(
     per_operator_moves=40,
     enabled_operators=None,
     iteration_callback=None,
-    apply_fleet_repair=True,
     random_seed=0,
-    extra_verbose=False,
     tenure_increase_step=2,
     max_tabu_tenure=None,
     stagnation_top_k=5,
@@ -34,11 +30,7 @@ def tabu_search(
     rng = random.Random(random_seed)
     search_start = time.perf_counter()
 
-    current, _ = maybe_repair_to_vehicle_limit(
-        problem,
-        clean_routes(problem, clone_routes(initial_routes)),
-        apply_fleet_repair=apply_fleet_repair,
-    )
+    current = clean_routes(problem, clone_routes(initial_routes))
     current_cost = total_distance(problem, current)
     best = clone_routes(current)
     best_cost = current_cost
@@ -47,8 +39,12 @@ def tabu_search(
     no_improve = 0
     base_tabu_tenure = max(1, tabu_tenure)
     active_tabu_tenure = base_tabu_tenure
-    stagnation_trigger = max(5, diversification_interval // 2) if diversification_interval > 0 else max(5, iterations // 5)
+    if diversification_interval > 0:
+        stagnation_trigger = max(5, diversification_interval // 2)
+    else:
+        stagnation_trigger = max(5, iterations // 5)
     max_tenure = max_tabu_tenure if max_tabu_tenure is not None else base_tabu_tenure * 3
+
     operators = enabled_operators or [
         "relocate",
         "swap",
@@ -58,26 +54,28 @@ def tabu_search(
         "cross_exchange",
     ]
 
-    if iteration_callback:
-        iteration_callback(
-            {
-                "iteration": 0,
-                "event": "start",
-                "current_cost": current_cost,
-                "best_cost": best_cost,
-                "operators": operators,
-                "active_tabu_tenure": active_tabu_tenure,
-                "elapsed_sec": 0.0,
-                "current_routes": clone_routes(current),
-                "best_routes": clone_routes(best),
-            }
-        )
+    def emit(payload):
+        if iteration_callback:
+            iteration_callback(payload)
+
+    emit(
+        {
+            "iteration": 0,
+            "event": "start",
+            "current_cost": current_cost,
+            "best_cost": best_cost,
+            "operators": operators,
+            "active_tabu_tenure": active_tabu_tenure,
+            "elapsed_sec": 0.0,
+            "current_routes": clone_routes(current),
+            "best_routes": clone_routes(best),
+        }
+    )
 
     for it in range(1, iterations + 1):
         periodic_improvement_attempted = False
         periodic_improvement_applied = False
 
-        # On configured multiples (e.g., 30/60/90), run improvement operator only.
         if enable_improvement_operator and improvement_interval > 0 and it % improvement_interval == 0:
             periodic_improvement_attempted = True
             event = "improvement_regret_reinsert_checked"
@@ -105,27 +103,26 @@ def tabu_search(
             else:
                 no_improve += 1
 
-            if iteration_callback:
-                iteration_callback(
-                    {
-                        "iteration": it,
-                        "event": event,
-                        "move_key": [],
-                        "move_objective": None,
-                        "tabu_until": None,
-                        "current_cost": current_cost,
-                        "best_cost": best_cost,
-                        "candidate_count": 0,
-                        "tabu_size": len(tabu),
-                        "active_tabu_tenure": active_tabu_tenure,
-                        "selection_mode": selection_mode,
-                        "periodic_improvement_attempted": periodic_improvement_attempted,
-                        "periodic_improvement_applied": periodic_improvement_applied,
-                        "elapsed_sec": time.perf_counter() - search_start,
-                        "current_routes": clone_routes(current),
-                        "best_routes": clone_routes(best),
-                    }
-                )
+            emit(
+                {
+                    "iteration": it,
+                    "event": event,
+                    "move_key": [],
+                    "move_objective": None,
+                    "tabu_until": None,
+                    "current_cost": current_cost,
+                    "best_cost": best_cost,
+                    "candidate_count": 0,
+                    "tabu_size": len(tabu),
+                    "active_tabu_tenure": active_tabu_tenure,
+                    "selection_mode": selection_mode,
+                    "periodic_improvement_attempted": periodic_improvement_attempted,
+                    "periodic_improvement_applied": periodic_improvement_applied,
+                    "elapsed_sec": time.perf_counter() - search_start,
+                    "current_routes": clone_routes(current),
+                    "best_routes": clone_routes(best),
+                }
+            )
             continue
 
         candidates = generate_candidates(
@@ -135,66 +132,45 @@ def tabu_search(
             enabled_operators=operators,
         )
 
-        candidate_rows = []
+        admissible = []
         for cand in candidates:
             is_tabu = tabu.get(cand.move_key, -1) >= it
             can_aspire = aspiration and cand.objective < best_cost
-            candidate_rows.append(
-                {
-                    "move_key": list(cand.move_key),
-                    "objective": cand.objective,
-                    "is_tabu": is_tabu,
-                    "can_aspire": can_aspire,
-                }
-            )
-
-        admissible_candidates = [
-            cand
-            for cand, row in zip(candidates, candidate_rows)
-            if not row["is_tabu"] or row["can_aspire"]
-        ]
+            if not is_tabu or can_aspire:
+                admissible.append(cand)
 
         selection_mode = "greedy_best"
         chosen = None
-        if admissible_candidates:
-            if no_improve >= stagnation_trigger and len(admissible_candidates) > 1:
+        if admissible:
+            if no_improve >= stagnation_trigger and len(admissible) > 1:
                 selection_mode = "stagnation_top_k_random"
-                top_k = max(1, min(stagnation_top_k, len(admissible_candidates)))
-                chosen = admissible_candidates[rng.randrange(top_k)]
+                top_k = max(1, min(stagnation_top_k, len(admissible)))
+                chosen = admissible[rng.randrange(top_k)]
             else:
-                chosen = admissible_candidates[0]
-
-        top_candidate_rows = candidate_rows[:3]
+                chosen = admissible[0]
 
         if chosen is None:
-            # Diversification fallback by restart from a random feasible constructor.
             methods = get_initial_methods(seed=rng.randint(0, 10_000))
-            restart_routes, _ = maybe_repair_to_vehicle_limit(
-                problem,
-                clean_routes(problem, methods["random"](problem)),
-                apply_fleet_repair=apply_fleet_repair,
-            )
-            restart_cost = total_distance(problem, restart_routes)
+            restart_routes = clean_routes(problem, methods["random"](problem))
             current = restart_routes
-            current_cost = restart_cost
+            current_cost = total_distance(problem, restart_routes)
             no_improve += 1
 
-            if iteration_callback:
-                iteration_callback(
-                    {
-                        "iteration": it,
-                        "event": "restart_no_candidate",
-                        "current_cost": current_cost,
-                        "best_cost": best_cost,
-                        "candidate_count": len(candidates),
-                        "active_tabu_tenure": active_tabu_tenure,
-                        "periodic_improvement_attempted": periodic_improvement_attempted,
-                        "periodic_improvement_applied": periodic_improvement_applied,
-                        "elapsed_sec": time.perf_counter() - search_start,
-                        "current_routes": clone_routes(current),
-                        "best_routes": clone_routes(best),
-                    }
-                )
+            emit(
+                {
+                    "iteration": it,
+                    "event": "restart_no_candidate",
+                    "current_cost": current_cost,
+                    "best_cost": best_cost,
+                    "candidate_count": len(candidates),
+                    "active_tabu_tenure": active_tabu_tenure,
+                    "periodic_improvement_attempted": periodic_improvement_attempted,
+                    "periodic_improvement_applied": periodic_improvement_applied,
+                    "elapsed_sec": time.perf_counter() - search_start,
+                    "current_routes": clone_routes(current),
+                    "best_routes": clone_routes(best),
+                }
+            )
             continue
 
         current = chosen.routes
@@ -212,7 +188,8 @@ def tabu_search(
         else:
             no_improve += 1
             if no_improve >= stagnation_trigger:
-                active_tabu_tenure = min(max_tenure, active_tabu_tenure + max(1, tenure_increase_step))
+                step = max(1, tenure_increase_step)
+                active_tabu_tenure = min(max_tenure, active_tabu_tenure + step)
 
         if diversification_interval > 0 and no_improve >= diversification_interval:
             perturbed = clone_routes(current)
@@ -241,11 +218,7 @@ def tabu_search(
                 event = "diversification_perturbation"
             else:
                 methods = get_initial_methods(seed=rng.randint(0, 10_000))
-                current, _ = maybe_repair_to_vehicle_limit(
-                    problem,
-                    clean_routes(problem, methods["random"](problem)),
-                    apply_fleet_repair=apply_fleet_repair,
-                )
+                current = clean_routes(problem, methods["random"](problem))
                 current_cost = total_distance(problem, current)
                 event = "diversification_restart"
 
@@ -258,58 +231,26 @@ def tabu_search(
             active_tabu_tenure = base_tabu_tenure
             event = "intensification"
 
-        if iteration_callback:
-            iteration_callback(
-                {
-                    "iteration": it,
-                    "event": event,
-                    "move_key": list(chosen.move_key),
-                    "move_objective": chosen.objective,
-                    "tabu_until": tabu_until,
-                    "current_cost": current_cost,
-                    "best_cost": best_cost,
-                    "candidate_count": len(candidates),
-                    "tabu_size": len(tabu),
-                    "active_tabu_tenure": active_tabu_tenure,
-                    "selection_mode": selection_mode,
-                    "periodic_improvement_attempted": periodic_improvement_attempted,
-                    "periodic_improvement_applied": periodic_improvement_applied,
-                    "elapsed_sec": time.perf_counter() - search_start,
-                    "current_routes": clone_routes(current),
-                    "best_routes": clone_routes(best),
-                    "candidate_rows": top_candidate_rows if extra_verbose else None,
-                    "tabu_entries": (
-                        [
-                            {"move_key": list(move_key), "tabu_until": expiry}
-                            for move_key, expiry in sorted(tabu.items(), key=lambda item: item[1])
-                            if expiry >= it
-                        ]
-                        if extra_verbose
-                        else None
-                    ),
-                }
-            )
-
-        if extra_verbose:
-            print(f"Top 3 candidates ({len(candidates)} total):")
-            for index, row in enumerate(top_candidate_rows, start=1):
-                status = "TABU" if row["is_tabu"] else "OK"
-                if row["can_aspire"]:
-                    status = f"{status}/ASP"
-                chosen_mark = " <= chosen" if chosen is not None and row["move_key"] == list(chosen.move_key) else ""
-                print(f"  {index}. {row['move_key']} | cost={row['objective']:.2f} | {status}{chosen_mark}")
-
-            print(f"Chosen move: {list(chosen.move_key)} | cost={chosen.objective:.2f} | tabu_until={tabu_until}")
-            print(f"Now tabu: {list(chosen.move_key)} until iteration {tabu_until}")
-            print(f"Active tabu list ({len([expiry for expiry in tabu.values() if expiry >= it])}):")
-            for move_key, expiry in sorted(tabu.items(), key=lambda item: item[1]):
-                if expiry < it:
-                    continue
-                print(f"  {list(move_key)} -> tabu_until={expiry}")
-            try:
-                input("Press Enter for next iteration...")
-            except EOFError:
-                pass
+        emit(
+            {
+                "iteration": it,
+                "event": event,
+                "move_key": list(chosen.move_key),
+                "move_objective": chosen.objective,
+                "tabu_until": tabu_until,
+                "current_cost": current_cost,
+                "best_cost": best_cost,
+                "candidate_count": len(candidates),
+                "tabu_size": len(tabu),
+                "active_tabu_tenure": active_tabu_tenure,
+                "selection_mode": selection_mode,
+                "periodic_improvement_attempted": periodic_improvement_attempted,
+                "periodic_improvement_applied": periodic_improvement_applied,
+                "elapsed_sec": time.perf_counter() - search_start,
+                "current_routes": clone_routes(current),
+                "best_routes": clone_routes(best),
+            }
+        )
 
     return best, best_cost
 
@@ -381,8 +322,6 @@ def run_tabu_from_method(
     intensification_interval,
     per_operator_moves,
     enabled_operators,
-    apply_fleet_repair=True,
-    extra_verbose=False,
     print_iterations=True,
     iteration_callback=None,
     tenure_increase_step=2,
@@ -402,13 +341,11 @@ def run_tabu_from_method(
 
     init_start = time.perf_counter()
     routes = methods[method](problem)
-    routes, repair_note = maybe_repair_to_vehicle_limit(problem, routes, apply_fleet_repair=apply_fleet_repair)
+    routes = clean_routes(problem, routes)
     init_elapsed = time.perf_counter() - init_start
 
     feasible, distance, message = evaluate_solution(problem, routes)
     init_distance = distance
-    if repair_note:
-        message = f"{message}{repair_note}"
     if not feasible:
         print_solution(f"Tabu start ({method})", routes, distance, feasible, message)
         return {
@@ -454,9 +391,7 @@ def run_tabu_from_method(
         per_operator_moves=per_operator_moves,
         enabled_operators=enabled_operators,
         iteration_callback=callback,
-        apply_fleet_repair=apply_fleet_repair,
         random_seed=seed,
-        extra_verbose=extra_verbose,
         tenure_increase_step=tenure_increase_step,
         max_tabu_tenure=max_tabu_tenure,
         stagnation_top_k=stagnation_top_k,

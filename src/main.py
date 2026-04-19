@@ -11,11 +11,9 @@ TABU_DIVERSIFICATION_INTERVAL = 35
 TABU_INTENSIFICATION_INTERVAL = 15
 TABU_PER_OPERATOR_MOVES = 80
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
-TABU_EXTRA_VERBOSE = False
 ENABLE_IMPROVEMENT_OPERATOR = True
 IMPROVEMENT_INTERVAL = 30
 IMPROVEMENT_REGRET_K = 2
-APPLY_FLEET_REPAIR = False
 PRINT_ITERATIONS = True
 
 
@@ -32,8 +30,6 @@ def main():
         intensification_interval=TABU_INTENSIFICATION_INTERVAL,
         per_operator_moves=TABU_PER_OPERATOR_MOVES,
         enabled_operators=TABU_OPERATORS,
-        apply_fleet_repair=APPLY_FLEET_REPAIR,
-        extra_verbose=TABU_EXTRA_VERBOSE,
         print_iterations=PRINT_ITERATIONS,
         enable_improvement_operator=ENABLE_IMPROVEMENT_OPERATOR,
         improvement_interval=IMPROVEMENT_INTERVAL,

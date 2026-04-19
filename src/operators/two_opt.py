@@ -1,7 +1,6 @@
 ﻿
-from models.problem import ProblemInstance
-from operators.move_types import MoveCandidate
-from utils.checker import clone_routes, evaluate_route
+from operators.move_types import add_move
+from utils.checker import evaluate_route
 
 
 def generate_two_opt_intra_moves(problem, routes, max_moves=120):
@@ -18,16 +17,15 @@ def generate_two_opt_intra_moves(problem, routes, max_moves=120):
                 if not feasible:
                     continue
 
-                new_routes = clone_routes(routes)
-                new_routes[route_idx] = candidate
-                moves.append(
-                    MoveCandidate(
-                        routes=new_routes,
-                        move_key=("two_opt_intra", route_idx, i, j),
-                        objective=dist,
-                    )
+                stop = add_move(
+                    moves,
+                    routes,
+                    [(route_idx, candidate)],
+                    ("two_opt_intra", route_idx, i, j),
+                    dist,
+                    max_moves,
                 )
-                if len(moves) >= max_moves:
+                if stop:
                     return moves
 
     return moves
@@ -46,14 +44,6 @@ def generate_two_opt_inter_moves(problem, routes, max_moves=120):
                     cand1 = route1[:i] + route2[j:]
                     cand2 = route2[:j] + route1[i:]
 
-                    if (cand1 == route1 and cand2 == route2) or (cand1 == route2 and cand2 == route1):
-                        continue
-
-                    if cand1[-1] != problem.depot_id:
-                        cand1.append(problem.depot_id)
-                    if cand2[-1] != problem.depot_id:
-                        cand2.append(problem.depot_id)
-
                     f1, d1, _, _ = evaluate_route(problem, cand1)
                     if not f1:
                         continue
@@ -61,17 +51,15 @@ def generate_two_opt_inter_moves(problem, routes, max_moves=120):
                     if not f2:
                         continue
 
-                    new_routes = clone_routes(routes)
-                    new_routes[r1] = cand1
-                    new_routes[r2] = cand2
-                    moves.append(
-                        MoveCandidate(
-                            routes=new_routes,
-                            move_key=("two_opt_inter", r1, r2, i, j),
-                            objective=d1 + d2,
-                        )
+                    stop = add_move(
+                        moves,
+                        routes,
+                        [(r1, cand1), (r2, cand2)],
+                        ("two_opt_inter", r1, r2, i, j),
+                        d1 + d2,
+                        max_moves,
                     )
-                    if len(moves) >= max_moves:
+                    if stop:
                         return moves
 
     return moves

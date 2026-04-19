@@ -1,14 +1,5 @@
-﻿
-from models.problem import ProblemInstance
-from utils.checker import evaluate_route, route_start_times
-
-
-def _distance(problem, i, j):
-    c1 = problem.customers[i]
-    c2 = problem.customers[j]
-    dx = c1.x - c2.x
-    dy = c1.y - c2.y
-    return (dx * dx + dy * dy) ** 0.5
+﻿from utils.checker import evaluate_route, route_start_times
+from utils.distance import euclidean_by_id
 
 
 def _best_position_cost(
@@ -38,7 +29,11 @@ def _best_position_cost(
         if candidate_starts is None:
             continue
 
-        delta_d = _distance(problem, i, customer_id) + _distance(problem, customer_id, j) - _distance(problem, i, j)
+        delta_d = (
+            euclidean_by_id(problem, i, customer_id)
+            + euclidean_by_id(problem, customer_id, j)
+            - euclidean_by_id(problem, i, j)
+        )
 
         delta_t = 0.0
         if pos < len(route):
@@ -56,9 +51,9 @@ def _best_position_cost(
 
 def solomon_i1(
     problem,
-    alpha1= 1.0,
-    alpha2= 0.0,
-    lam= 1.0,
+    alpha1=1.0,
+    alpha2=0.0,
+    lam=1.0,
 ):
     unserved = sorted(problem.customer_ids, key=lambda cid: problem.customers[cid].due_time)
     routes = []
@@ -81,7 +76,7 @@ def solomon_i1(
                 if pos == -1:
                     continue
 
-                c2 = lam * _distance(problem, depot, customer_id) - c1
+                c2 = lam * euclidean_by_id(problem, depot, customer_id) - c1
                 if c2 > best_c2:
                     best_c2 = c2
                     best_customer = customer_id

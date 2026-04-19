@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from heuristics.tabu_search import run_tabu_from_method
 from init.methods import get_initial_methods
-from utils.checker import evaluate_solution, maybe_repair_to_vehicle_limit
+from utils.checker import evaluate_solution
 from utils.parser import parse_instance
 
 ALL_METHODS = ["greedy", "solomon", "clarke_wright", "random", "sweep"]
@@ -87,8 +87,6 @@ class App(tk.Tk):
         self.instance_var = tk.StringVar(value="R108")
         self.instance_file_var = tk.StringVar(value="")
         self.seed_var = tk.StringVar(value="0")
-        self.apply_fleet_repair_var = tk.BooleanVar(value=True)
-
         self.mode_var = tk.StringVar(value="tabu")
         self.init_method_var = tk.StringVar(value="solomon")
 
@@ -112,41 +110,34 @@ class App(tk.Tk):
         self._row(left, 2, "Mode", self._mode_picker(left))
         self._row(left, 3, "Init method", ttk.Combobox(left, textvariable=self.init_method_var, values=ALL_METHODS, state="readonly"))
 
-        repair_check = ttk.Checkbutton(
-            left,
-            text="Apply fleet repair",
-            variable=self.apply_fleet_repair_var,
-        )
-        repair_check.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 4))
+        ttk.Separator(left).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
 
-        ttk.Separator(left).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 8))
-
-        self._row(left, 6, "Tabu iterations", ttk.Entry(left, textvariable=self.iterations_var))
-        self._row(left, 7, "Tabu tenure", ttk.Entry(left, textvariable=self.tabu_tenure_var))
+        self._row(left, 5, "Tabu iterations", ttk.Entry(left, textvariable=self.iterations_var))
+        self._row(left, 6, "Tabu tenure", ttk.Entry(left, textvariable=self.tabu_tenure_var))
 
         aspiration_check = ttk.Checkbutton(left, text="Use aspiration", variable=self.aspiration_var)
-        aspiration_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=4)
+        aspiration_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=4)
 
-        self._row(left, 9, "Diversification", ttk.Entry(left, textvariable=self.div_interval_var))
-        self._row(left, 10, "Intensification", ttk.Entry(left, textvariable=self.int_interval_var))
-        self._row(left, 11, "Moves / operator", ttk.Entry(left, textvariable=self.per_op_moves_var))
+        self._row(left, 8, "Diversification", ttk.Entry(left, textvariable=self.div_interval_var))
+        self._row(left, 9, "Intensification", ttk.Entry(left, textvariable=self.int_interval_var))
+        self._row(left, 10, "Moves / operator", ttk.Entry(left, textvariable=self.per_op_moves_var))
 
         ttk.Checkbutton(
             left,
             text="Enable improvement operator",
             variable=self.enable_improvement_operator_var,
-        ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(6, 2))
-        self._row(left, 13, "Improvement interval", ttk.Entry(left, textvariable=self.improvement_interval_var))
-        self._row(left, 14, "Improvement regret_k", ttk.Entry(left, textvariable=self.improvement_regret_k_var))
+        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        self._row(left, 12, "Improvement interval", ttk.Entry(left, textvariable=self.improvement_interval_var))
+        self._row(left, 13, "Improvement regret_k", ttk.Entry(left, textvariable=self.improvement_regret_k_var))
 
         ttk.Checkbutton(
             left,
             text="Show iteration details",
             variable=self.show_iteration_details_var,
-        ).grid(row=15, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        ).grid(row=14, column=0, columnspan=2, sticky="w", pady=(6, 2))
 
         ops_frame = ttk.Frame(left, style="Panel.TFrame")
-        ops_frame.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ops_frame.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Label(ops_frame, text="Tabu operators", style="Field.TLabel").grid(row=0, column=0, sticky="w")
 
         for idx, name in enumerate(TABU_OPERATORS, start=1):
@@ -158,8 +149,8 @@ class App(tk.Tk):
             )
 
         self.run_button = ttk.Button(left, text="Run", command=self._run_clicked)
-        self.run_button.grid(row=17, column=0, sticky="ew", pady=(12, 0))
-        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=17, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
+        self.run_button.grid(row=16, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=16, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
 
         self.status_var = tk.StringVar(value="Ready")
         status_row = ttk.Frame(right, style="Panel.TFrame")
@@ -335,7 +326,6 @@ class App(tk.Tk):
             "seed": int(self.seed_var.get()),
             "mode": self.mode_var.get(),
             "init_method": self.init_method_var.get(),
-            "apply_fleet_repair": self.apply_fleet_repair_var.get(),
             "iterations": int(self.iterations_var.get()),
             "tabu_tenure": int(self.tabu_tenure_var.get()),
             "aspiration": self.aspiration_var.get(),
@@ -372,14 +362,8 @@ class App(tk.Tk):
             raise ValueError(f"Unknown init method: {method_name}")
 
         routes = methods[method_name](problem)
-        routes, repair_note = maybe_repair_to_vehicle_limit(
-            problem,
-            routes,
-            apply_fleet_repair=config["apply_fleet_repair"],
-        )
+        routes = [list(route) for route in routes if len(route) >= 2 and route[0] == problem.depot_id and route[-1] == problem.depot_id]
         feasible, distance, message = evaluate_solution(problem, routes)
-        if repair_note:
-            message = f"{message}{repair_note}"
 
         lines = [
             f"Mode: initial ({method_name})",
@@ -428,7 +412,6 @@ class App(tk.Tk):
             intensification_interval=config["intensification_interval"],
             per_operator_moves=config["per_operator_moves"],
             enabled_operators=config["enabled_operators"],
-            apply_fleet_repair=config["apply_fleet_repair"],
             print_iterations=False,
             iteration_callback=ui_iteration_callback,
             enable_improvement_operator=config["enable_improvement_operator"],

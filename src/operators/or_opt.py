@@ -1,7 +1,6 @@
 ﻿
-from models.problem import ProblemInstance
-from operators.move_types import MoveCandidate
-from utils.checker import clone_routes, evaluate_route
+from operators.move_types import add_move
+from utils.checker import evaluate_route
 
 
 def generate_or_opt_moves(problem, routes, max_moves=120):
@@ -21,38 +20,41 @@ def generate_or_opt_moves(problem, routes, max_moves=120):
 
                 for dst_idx, dst_route in enumerate(routes):
                     for dst_pos in range(1, len(dst_route)):
-                        if src_idx == dst_idx and dst_pos >= start and dst_pos <= start + chain_len:
+                        if src_idx == dst_idx and start <= dst_pos <= start + chain_len:
                             continue
 
                         if src_idx == dst_idx:
-                            pos = dst_pos
+                            insert_at = dst_pos
                             if dst_pos > start:
-                                pos -= chain_len
-                            candidate = src_removed[:pos] + chain + src_removed[pos:]
+                                insert_at -= chain_len
+
+                            candidate = (
+                                src_removed[:insert_at]
+                                + chain
+                                + src_removed[insert_at:]
+                            )
                             feasible, distance, _, _ = evaluate_route(problem, candidate)
                             if not feasible:
                                 continue
-                            new_routes = clone_routes(routes)
-                            new_routes[src_idx] = candidate
+                            updates = [(src_idx, candidate)]
                             objective = distance
                         else:
                             candidate_dst = dst_route[:dst_pos] + chain + dst_route[dst_pos:]
                             f_dst, d_dst, _, _ = evaluate_route(problem, candidate_dst)
                             if not f_dst:
                                 continue
-                            new_routes = clone_routes(routes)
-                            new_routes[src_idx] = src_removed
-                            new_routes[dst_idx] = candidate_dst
+                            updates = [(src_idx, src_removed), (dst_idx, candidate_dst)]
                             objective = d_src + d_dst
 
-                        moves.append(
-                            MoveCandidate(
-                                routes=new_routes,
-                                move_key=("or_opt", tuple(chain), src_idx, dst_idx),
-                                objective=objective,
-                            )
+                        stop = add_move(
+                            moves,
+                            routes,
+                            updates,
+                            ("or_opt", tuple(chain), src_idx, dst_idx),
+                            objective,
+                            max_moves,
                         )
-                        if len(moves) >= max_moves:
+                        if stop:
                             return moves
 
     return moves

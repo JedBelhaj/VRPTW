@@ -1,8 +1,4 @@
-﻿"""Operator-focused helper functions for Tabu Search."""
-
-from models.problem import ProblemInstance
-from operators.cross_exchange import generate_cross_exchange_moves
-from operators.move_types import MoveCandidate
+﻿from operators.cross_exchange import generate_cross_exchange_moves
 from operators.or_opt import generate_or_opt_moves
 from operators.relocate import generate_relocation_moves
 from operators.swap import generate_swap_moves
@@ -12,7 +8,6 @@ from .route_helpers import clean_routes, total_distance
 
 
 def operator_generators():
-    """Map operator names to their move generators."""
     return {
         "relocate": generate_relocation_moves,
         "swap": generate_swap_moves,
@@ -24,7 +19,6 @@ def operator_generators():
 
 
 def is_inter_route_move(move_key):
-    """Identify whether a move touches more than one route."""
     if not move_key:
         return False
 
@@ -42,7 +36,6 @@ def generate_candidates(
     per_operator,
     enabled_operators,
 ):
-    """Generate and rank all feasible candidate moves from enabled operators."""
     candidates = []
     generators = operator_generators()
 

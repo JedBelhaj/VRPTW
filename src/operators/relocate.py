@@ -1,7 +1,6 @@
 ﻿
-from models.problem import ProblemInstance
-from operators.move_types import MoveCandidate
-from utils.checker import clone_routes, evaluate_route
+from operators.move_types import add_move
+from utils.checker import evaluate_route
 
 
 def generate_relocation_moves(problem, routes, max_moves=120):
@@ -21,31 +20,37 @@ def generate_relocation_moves(problem, routes, max_moves=120):
                         continue
 
                     if src_idx == dst_idx:
-                        candidate_route = src_removed[:dst_pos - (1 if dst_pos > src_pos else 0)] + [customer_id] + src_removed[dst_pos - (1 if dst_pos > src_pos else 0) :]
+                        insert_at = dst_pos
+                        if dst_pos > src_pos:
+                            insert_at -= 1
+
+                        candidate_route = (
+                            src_removed[:insert_at]
+                            + [customer_id]
+                            + src_removed[insert_at:]
+                        )
                         feasible, distance, _, _ = evaluate_route(problem, candidate_route)
                         if not feasible:
                             continue
-                        new_routes = clone_routes(routes)
-                        new_routes[src_idx] = candidate_route
+                        updates = [(src_idx, candidate_route)]
                         objective = distance
                     else:
                         candidate_dst = dst_route[:dst_pos] + [customer_id] + dst_route[dst_pos:]
                         dst_feasible, dst_distance, _, _ = evaluate_route(problem, candidate_dst)
                         if not dst_feasible:
                             continue
-                        new_routes = clone_routes(routes)
-                        new_routes[src_idx] = src_removed
-                        new_routes[dst_idx] = candidate_dst
+                        updates = [(src_idx, src_removed), (dst_idx, candidate_dst)]
                         objective = src_distance + dst_distance
 
-                    moves.append(
-                        MoveCandidate(
-                            routes=new_routes,
-                            move_key=("relocate", customer_id, src_idx, dst_idx),
-                            objective=objective,
-                        )
+                    stop = add_move(
+                        moves,
+                        routes,
+                        updates,
+                        ("relocate", customer_id, src_idx, dst_idx),
+                        objective,
+                        max_moves,
                     )
-                    if len(moves) >= max_moves:
+                    if stop:
                         return moves
 
     return moves

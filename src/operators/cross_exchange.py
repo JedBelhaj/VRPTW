@@ -1,7 +1,6 @@
 ﻿
-from models.problem import ProblemInstance
-from operators.move_types import MoveCandidate
-from utils.checker import clone_routes, evaluate_route
+from operators.move_types import add_move
+from utils.checker import evaluate_route
 
 
 def generate_cross_exchange_moves(problem, routes, max_moves=120):
@@ -35,17 +34,15 @@ def generate_cross_exchange_moves(problem, routes, max_moves=120):
                             if not f2:
                                 continue
 
-                            new_routes = clone_routes(routes)
-                            new_routes[r1] = cand1
-                            new_routes[r2] = cand2
-                            moves.append(
-                                MoveCandidate(
-                                    routes=new_routes,
-                                    move_key=("cross_exchange", tuple(seg1), tuple(seg2), r1, r2),
-                                    objective=d1 + d2,
-                                )
+                            stop = add_move(
+                                moves,
+                                routes,
+                                [(r1, cand1), (r2, cand2)],
+                                ("cross_exchange", tuple(seg1), tuple(seg2), r1, r2),
+                                d1 + d2,
+                                max_moves,
                             )
-                            if len(moves) >= max_moves:
+                            if stop:
                                 return moves
 
     return moves

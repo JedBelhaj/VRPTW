@@ -4,7 +4,6 @@ from init.greedy_insertion import greedy_insertion
 from init.random_feasible import random_feasible_solution
 from init.solomon_i1 import solomon_i1
 from init.sweep import sweep_algorithm
-from models.problem import ProblemInstance
 
 
 def get_initial_methods(seed=0):

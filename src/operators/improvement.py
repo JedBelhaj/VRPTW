@@ -1,7 +1,6 @@
 ﻿"""Improvement operator functions used by tabu search."""
 
 from heuristics.helpers.route_helpers import clean_routes, total_distance
-from models.problem import ProblemInstance
 from utils.checker import clone_routes, evaluate_route
 
 

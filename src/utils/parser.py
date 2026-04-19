@@ -4,36 +4,35 @@ from models.customer import Customer
 from models.problem import ProblemInstance
 
 
-def _resolve_instance_path(instance):
-    candidate = Path(instance)
-    if candidate.exists():
-        return candidate
-
-    base = Path(__file__).resolve().parents[2]
-    archive_candidate = base / "Archive" / f"{instance}.txt"
-    if archive_candidate.exists():
-        return archive_candidate
-
-    raise FileNotFoundError(f"Instance not found: {instance}")
-
-
 def parse_instance(instance):
-    path = _resolve_instance_path(instance)
-    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    path = Path(instance)
+    if not path.exists():
+        base = Path(__file__).resolve().parents[2]
+        path = base / "Archive" / f"{instance}.txt"
+    if not path.exists():
+        raise FileNotFoundError(f"Instance not found: {instance}")
+
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            lines.append(line)
 
     vehicle_count = 0
     capacity = 0
-    start_index = 0
+    start_index = None
 
     for i, line in enumerate(lines):
         if line.startswith("VEHICLE") and i + 2 < len(lines):
-            vehicle_info = lines[i + 2].split()
-            vehicle_count = int(vehicle_info[0])
-            capacity = int(vehicle_info[1])
-
+            parts = lines[i + 2].split()
+            vehicle_count = int(parts[0])
+            capacity = int(parts[1])
         if line.startswith("CUSTOMER"):
             start_index = i + 2
             break
+
+    if start_index is None:
+        raise ValueError("CUSTOMER section not found in instance file.")
 
     customers = {}
     for line in lines[start_index:]:
@@ -66,18 +65,19 @@ def parse_instance(instance):
 
 def parse(instance):
     problem = parse_instance(instance)
-    customers = [
-        {
-            "id": c.id,
-            "x": c.x,
-            "y": c.y,
-            "demand": c.demand,
-            "ready_time": int(c.ready_time),
-            "due_time": int(c.due_time),
-            "service_time": int(c.service_time),
-        }
-        for c in problem.customers.values()
-    ]
+    customers = []
+    for c in problem.customers.values():
+        customers.append(
+            {
+                "id": c.id,
+                "x": c.x,
+                "y": c.y,
+                "demand": c.demand,
+                "ready_time": int(c.ready_time),
+                "due_time": int(c.due_time),
+                "service_time": int(c.service_time),
+            }
+        )
     customers.sort(key=lambda c: c["id"])
     depot = customers[0]
     return problem.vehicle_count, problem.capacity, depot, customers

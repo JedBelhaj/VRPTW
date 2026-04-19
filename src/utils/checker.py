@@ -1,21 +1,14 @@
 ﻿
-from models.problem import ProblemInstance
+from utils.distance import euclidean_by_id
 
 
-def euclidean(problem, c1_id, c2_id):
-    c1 = problem.customers[c1_id]
-    c2 = problem.customers[c2_id]
-    dx = c1.x - c2.x
-    dy = c1.y - c2.y
-    return (dx * dx + dy * dy) ** 0.5
+INFEASIBLE_ROUTE = (False, float("inf"), float("inf"), float("inf"))
 
+# Travel time unit = Distance unit
+# Route schedule time = travel + wait + service
 
 def clone_routes(routes):
     return [list(route) for route in routes]
-
-
-def route_load(problem, route):
-    return sum(problem.customers[cid].demand for cid in route[1:-1])
 
 
 def route_start_times(problem, route):
@@ -24,7 +17,7 @@ def route_start_times(problem, route):
     current = route[0]
 
     for node in route[1:]:
-        travel = euclidean(problem, current, node)
+        travel = euclidean_by_id(problem, current, node)
         arrival = time + travel
         customer = problem.customers[node]
         start = max(arrival, customer.ready_time)
@@ -39,7 +32,7 @@ def route_start_times(problem, route):
 
 def evaluate_route(problem, route):
     if len(route) < 2 or route[0] != problem.depot_id or route[-1] != problem.depot_id:
-        return False, float("inf"), float("inf"), float("inf")
+        return INFEASIBLE_ROUTE
 
     load = 0.0
     time = 0.0
@@ -47,13 +40,13 @@ def evaluate_route(problem, route):
     current = route[0]
 
     for node in route[1:]:
-        travel = euclidean(problem, current, node)
+        travel = euclidean_by_id(problem, current, node)
         arrival = time + travel
         customer = problem.customers[node]
         start = max(arrival, customer.ready_time)
 
         if start > customer.due_time:
-            return False, float("inf"), float("inf"), float("inf")
+            return INFEASIBLE_ROUTE
 
         distance += travel
         time = start + customer.service_time
@@ -63,7 +56,7 @@ def evaluate_route(problem, route):
         load += problem.customers[node].demand
 
     if load > problem.capacity:
-        return False, float("inf"), float("inf"), float("inf")
+        return INFEASIBLE_ROUTE
 
     return True, distance, load, time
 
@@ -96,104 +89,3 @@ def evaluate_solution(problem, routes):
         return False, float("inf"), f"Missing customers: {missing[:10]}"
 
     return True, total_distance, "OK"
-
-
-def _best_feasible_insertion(
-    problem,
-    routes,
-    customer_id,
-):
-    best_route_idx = None
-    best_route = None
-    best_delta = float("inf")
-
-    for route_idx, route in enumerate(routes):
-        base_feasible, base_distance, _, _ = evaluate_route(problem, route)
-        if not base_feasible:
-            continue
-
-        for pos in range(1, len(route)):
-            candidate = route[:pos] + [customer_id] + route[pos:]
-            feasible, distance, _, _ = evaluate_route(problem, candidate)
-            if not feasible:
-                continue
-
-            delta = distance - base_distance
-            if delta < best_delta:
-                best_delta = delta
-                best_route_idx = route_idx
-                best_route = candidate
-
-    return best_route_idx, best_route, best_delta
-
-
-def repair_to_vehicle_limit(
-    problem,
-    routes,
-    target_vehicle_count= None,
-):
-    """Try to reduce route count by reinserting customers of one route into others.
-
-    Returns repaired routes if successful, else None.
-    """
-    target = problem.vehicle_count if target_vehicle_count is None else target_vehicle_count
-    working = clone_routes(routes)
-
-    while len(working) > target:
-        merged_one = False
-        victim_order = sorted(range(len(working)), key=lambda idx: len(working[idx]) - 2)
-
-        for victim_idx in victim_order:
-            victim_customers = working[victim_idx][1:-1]
-            if not victim_customers:
-                continue
-
-            candidate_routes = clone_routes(working)
-            candidate_routes.pop(victim_idx)
-
-            success = True
-            for customer_id in victim_customers:
-                dst_idx, best_route, _ = _best_feasible_insertion(problem, candidate_routes, customer_id)
-                if dst_idx is None or best_route is None:
-                    success = False
-                    break
-                candidate_routes[dst_idx] = best_route
-
-            if success:
-                working = candidate_routes
-                merged_one = True
-                break
-
-        if not merged_one:
-            return None
-
-    return working
-
-
-def maybe_repair_to_vehicle_limit(
-    problem,
-    routes,
-    apply_fleet_repair= True,
-):
-    if not apply_fleet_repair or len(routes) <= problem.vehicle_count:
-        return routes, ""
-
-    repaired = repair_to_vehicle_limit(problem, routes, target_vehicle_count=problem.vehicle_count)
-    if repaired is not None:
-        return repaired, " | fleet repair: success"
-
-    return routes, " | fleet repair: failed"
-
-
-def best_insertion_position(problem, route, customer_id):
-    best_position = None
-    best_cost = float("inf")
-
-    for pos in range(1, len(route)):
-        candidate = route[:pos] + [customer_id] + route[pos:]
-        feasible, distance, _, _ = evaluate_route(problem, candidate)
-        if feasible and distance < best_cost:
-            best_position = pos
-            best_cost = distance
-
-    return best_position, best_cost

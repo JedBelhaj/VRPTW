@@ -1,14 +1,5 @@
-﻿
-from models.problem import ProblemInstance
-from utils.checker import evaluate_route
-
-
-def _distance(problem, i, j):
-    c1 = problem.customers[i]
-    c2 = problem.customers[j]
-    dx = c1.x - c2.x
-    dy = c1.y - c2.y
-    return (dx * dx + dy * dy) ** 0.5
+﻿from utils.checker import evaluate_route
+from utils.distance import euclidean_by_id
 
 
 def _find_route_index(routes, customer_id):
@@ -28,7 +19,7 @@ def clarke_wright_savings(problem):
         for j in range(i + 1, len(customers)):
             ci = customers[i]
             cj = customers[j]
-            saving = _distance(problem, depot, ci) + _distance(problem, depot, cj) - _distance(problem, ci, cj)
+            saving = euclidean_by_id(problem, depot, ci) + euclidean_by_id(problem, depot, cj) - euclidean_by_id(problem, ci, cj)
             savings.append((saving, ci, cj))
 
     savings.sort(reverse=True, key=lambda x: x[0])

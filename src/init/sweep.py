@@ -1,7 +1,7 @@
 ﻿import math
 
-from models.problem import ProblemInstance
 from utils.checker import evaluate_route
+from utils.distance import euclidean_by_id
 
 
 def _angle(problem, customer_id):
@@ -52,9 +52,7 @@ def _build_cluster_routes(problem, cluster):
                 if not feasible:
                     continue
 
-                c1 = problem.customers[current]
-                c2 = problem.customers[customer_id]
-                d = ((c1.x - c2.x) ** 2 + (c1.y - c2.y) ** 2) ** 0.5
+                d = euclidean_by_id(problem, current, customer_id)
                 if d < best_distance:
                     best_distance = d
                     best = customer_id

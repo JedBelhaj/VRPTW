@@ -1,10 +1,8 @@
-﻿
-from models.problem import ProblemInstance
-from utils.checker import evaluate_route
+﻿from utils.checker import evaluate_route
+from utils.distance import euclidean_by_id
 
 
 def greedy_insertion(problem):
-    """Build routes by repeatedly appending the nearest feasible unserved customer."""
     depot = problem.depot_id
     unserved = set(problem.customer_ids)
     routes = []
@@ -23,7 +21,7 @@ def greedy_insertion(problem):
                 if not feasible:
                     continue
 
-                leg = ((problem.customers[current].x - problem.customers[customer_id].x) ** 2 + (problem.customers[current].y - problem.customers[customer_id].y) ** 2) ** 0.5
+                leg = euclidean_by_id(problem, current, customer_id)
                 if leg < best_distance:
                     best_distance = leg
                     best_customer = customer_id
