@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import Dict, List
+﻿from dataclasses import dataclass
 
 from models.customer import Customer
 
@@ -10,8 +9,9 @@ class ProblemInstance:
     vehicle_count: int
     capacity: int
     depot_id: int
-    customers: Dict[int, Customer]
+    customers: dict
 
     @property
-    def customer_ids(self) -> List[int]:
+    def customer_ids(self):
         return [cid for cid in self.customers if cid != self.depot_id]
+

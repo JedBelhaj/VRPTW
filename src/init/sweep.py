@@ -1,22 +1,21 @@
-import math
-from typing import List
+﻿import math
 
 from models.problem import ProblemInstance
 from utils.checker import evaluate_route
 
 
-def _angle(problem: ProblemInstance, customer_id: int) -> float:
+def _angle(problem, customer_id):
     depot = problem.customers[problem.depot_id]
     customer = problem.customers[customer_id]
     return math.atan2(customer.y - depot.y, customer.x - depot.x)
 
 
-def sweep_algorithm(problem: ProblemInstance) -> List[List[int]]:
+def sweep_algorithm(problem):
     depot = problem.depot_id
     ordered = sorted(problem.customer_ids, key=lambda cid: _angle(problem, cid))
 
-    routes: List[List[int]] = []
-    current_cluster: List[int] = []
+    routes = []
+    current_cluster = []
     current_load = 0
 
     for customer_id in ordered:
@@ -35,9 +34,9 @@ def sweep_algorithm(problem: ProblemInstance) -> List[List[int]]:
     return routes
 
 
-def _build_cluster_routes(problem: ProblemInstance, cluster: List[int]) -> List[List[int]]:
+def _build_cluster_routes(problem, cluster):
     depot = problem.depot_id
-    routes: List[List[int]] = []
+    routes = []
     unserved = set(cluster)
 
     while unserved:
@@ -77,3 +76,4 @@ def _build_cluster_routes(problem: ProblemInstance, cluster: List[int]) -> List[
             routes.append(route)
 
     return routes
+

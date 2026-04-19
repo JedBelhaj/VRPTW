@@ -1,6 +1,4 @@
-"""Improvement operator functions used by tabu search."""
-
-from typing import List, Optional, Tuple
+﻿"""Improvement operator functions used by tabu search."""
 
 from heuristics.helpers.route_helpers import clean_routes, total_distance
 from models.problem import ProblemInstance
@@ -8,12 +6,12 @@ from utils.checker import clone_routes, evaluate_route
 
 
 def _best_and_second_insertion_delta(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    customer_id: int,
-) -> Tuple[Optional[Tuple[float, int, List[int]]], Optional[Tuple[float, int, List[int]]]]:
-    best: Optional[Tuple[float, int, List[int]]] = None
-    second: Optional[Tuple[float, int, List[int]]] = None
+    problem,
+    routes,
+    customer_id,
+):
+    best = None
+    second = None
 
     for route_idx, route in enumerate(routes):
         feasible, base_distance, _, _ = evaluate_route(problem, route)
@@ -38,10 +36,10 @@ def _best_and_second_insertion_delta(
 
 
 def destroy_smallest_route_regret_reinsert(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    regret_k: int = 2,
-) -> Tuple[List[List[int]], bool]:
+    problem,
+    routes,
+    regret_k=2,
+):
     """Destroy the smallest route and reinsert customers by regret criterion."""
     if len(routes) < 2:
         return routes, False
@@ -56,8 +54,8 @@ def destroy_smallest_route_regret_reinsert(
     pending = list(extracted_customers)
 
     while pending:
-        best_customer: Optional[int] = None
-        best_customer_insertion: Optional[Tuple[float, int, List[int]]] = None
+        best_customer = None
+        best_customer_insertion = None
         max_regret = float("-inf")
 
         for customer_id in pending:

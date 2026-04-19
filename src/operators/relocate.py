@@ -1,12 +1,11 @@
-from typing import List
-
+﻿
 from models.problem import ProblemInstance
 from operators.move_types import MoveCandidate
 from utils.checker import clone_routes, evaluate_route
 
 
-def generate_relocation_moves(problem: ProblemInstance, routes: List[List[int]], max_moves: int = 120) -> List[MoveCandidate]:
-    moves: List[MoveCandidate] = []
+def generate_relocation_moves(problem, routes, max_moves=120):
+    moves = []
 
     for src_idx, src_route in enumerate(routes):
         for src_pos in range(1, len(src_route) - 1):
@@ -50,3 +49,4 @@ def generate_relocation_moves(problem: ProblemInstance, routes: List[List[int]],
                         return moves
 
     return moves
+

@@ -1,6 +1,4 @@
-"""Operator-focused helper functions for Tabu Search."""
-
-from typing import Callable, Dict, List, Tuple
+﻿"""Operator-focused helper functions for Tabu Search."""
 
 from models.problem import ProblemInstance
 from operators.cross_exchange import generate_cross_exchange_moves
@@ -13,10 +11,7 @@ from operators.two_opt import generate_two_opt_inter_moves, generate_two_opt_int
 from .route_helpers import clean_routes, total_distance
 
 
-MoveGenerator = Callable[..., List[MoveCandidate]]
-
-
-def operator_generators() -> Dict[str, MoveGenerator]:
+def operator_generators():
     """Map operator names to their move generators."""
     return {
         "relocate": generate_relocation_moves,
@@ -28,7 +23,7 @@ def operator_generators() -> Dict[str, MoveGenerator]:
     }
 
 
-def is_inter_route_move(move_key: Tuple) -> bool:
+def is_inter_route_move(move_key):
     """Identify whether a move touches more than one route."""
     if not move_key:
         return False
@@ -42,13 +37,13 @@ def is_inter_route_move(move_key: Tuple) -> bool:
 
 
 def generate_candidates(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    per_operator: int,
-    enabled_operators: List[str],
-) -> List[MoveCandidate]:
+    problem,
+    routes,
+    per_operator,
+    enabled_operators,
+):
     """Generate and rank all feasible candidate moves from enabled operators."""
-    candidates: List[MoveCandidate] = []
+    candidates = []
     generators = operator_generators()
 
     for operator in enabled_operators:
@@ -62,3 +57,4 @@ def generate_candidates(
 
     candidates.sort(key=lambda c: c.objective)
     return [c for c in candidates if c.objective < float("inf")]
+

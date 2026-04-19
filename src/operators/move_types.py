@@ -1,9 +1,9 @@
-from dataclasses import dataclass
-from typing import List, Tuple
+﻿from dataclasses import dataclass
 
 
 @dataclass
 class MoveCandidate:
-    routes: List[List[int]]
-    move_key: Tuple
+    routes: list
+    move_key: tuple
     objective: float
+

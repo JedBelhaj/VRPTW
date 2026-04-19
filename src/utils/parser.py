@@ -1,11 +1,10 @@
-from pathlib import Path
-from typing import Dict, List, Tuple
+﻿from pathlib import Path
 
 from models.customer import Customer
 from models.problem import ProblemInstance
 
 
-def _resolve_instance_path(instance: str) -> Path:
+def _resolve_instance_path(instance):
     candidate = Path(instance)
     if candidate.exists():
         return candidate
@@ -18,7 +17,7 @@ def _resolve_instance_path(instance: str) -> Path:
     raise FileNotFoundError(f"Instance not found: {instance}")
 
 
-def parse_instance(instance: str) -> ProblemInstance:
+def parse_instance(instance):
     path = _resolve_instance_path(instance)
     lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
@@ -36,7 +35,7 @@ def parse_instance(instance: str) -> ProblemInstance:
             start_index = i + 2
             break
 
-    customers: Dict[int, Customer] = {}
+    customers = {}
     for line in lines[start_index:]:
         parts = line.split()
         if len(parts) < 7:
@@ -65,7 +64,7 @@ def parse_instance(instance: str) -> ProblemInstance:
     )
 
 
-def parse(instance: str) -> Tuple[int, int, dict, List[dict]]:
+def parse(instance):
     problem = parse_instance(instance)
     customers = [
         {

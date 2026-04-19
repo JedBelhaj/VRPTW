@@ -1,17 +1,16 @@
-import random
-from typing import List
+﻿import random
 
 from models.problem import ProblemInstance
 from utils.checker import evaluate_route
 
 
-def random_feasible_solution(problem: ProblemInstance, seed: int = 0) -> List[List[int]]:
+def random_feasible_solution(problem, seed=0):
     rng = random.Random(seed)
     depot = problem.depot_id
     customers = list(problem.customer_ids)
     rng.shuffle(customers)
 
-    routes: List[List[int]] = []
+    routes = []
 
     for customer_id in customers:
         inserted = False
@@ -37,3 +36,4 @@ def random_feasible_solution(problem: ProblemInstance, seed: int = 0) -> List[Li
         routes.append(singleton)
 
     return routes
+

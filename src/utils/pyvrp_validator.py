@@ -1,21 +1,20 @@
-import math
-from typing import Any, Dict, List
+﻿import math
 
 from models.problem import ProblemInstance
 
 
-def _scaled(value: float, scale: int) -> int:
+def _scaled(value, scale):
     return int(round(value * scale))
 
 
 def compare_solution_with_pyvrp(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    baseline_feasible: bool,
-    baseline_distance: float,
-    distance_tolerance: float = 1e-2,
-    scale: int = 1000,
-) -> Dict[str, Any]:
+    problem,
+    routes,
+    baseline_feasible,
+    baseline_distance,
+    distance_tolerance=1e-2,
+    scale=1000,
+):
     try:
         import pyvrp
     except ImportError:
@@ -40,7 +39,7 @@ def compare_solution_with_pyvrp(
             name=f"depot_{problem.depot_id}",
         )
 
-        customer_to_visit_idx: Dict[int, int] = {}
+        customer_to_visit_idx = {}
         locations_by_id = {problem.depot_id: depot}
 
         for visit_idx, customer_id in enumerate(sorted(problem.customer_ids), start=1):
@@ -80,9 +79,9 @@ def compare_solution_with_pyvrp(
 
         data = model.data()
 
-        pyvrp_routes: List[List[int]] = []
+        pyvrp_routes = []
         for route in routes:
-            visits: List[int] = []
+            visits = []
             for customer_id in route:
                 if customer_id == problem.depot_id:
                     continue

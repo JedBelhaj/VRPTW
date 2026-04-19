@@ -1,12 +1,11 @@
-from typing import List
-
+﻿
 from models.problem import ProblemInstance
 from operators.move_types import MoveCandidate
 from utils.checker import clone_routes, evaluate_route
 
 
-def generate_swap_moves(problem: ProblemInstance, routes: List[List[int]], max_moves: int = 120) -> List[MoveCandidate]:
-    moves: List[MoveCandidate] = []
+def generate_swap_moves(problem, routes, max_moves=120):
+    moves = []
 
     for r1 in range(len(routes)):
         for r2 in range(r1 + 1, len(routes)):
@@ -45,3 +44,4 @@ def generate_swap_moves(problem: ProblemInstance, routes: List[List[int]], max_m
                         return moves
 
     return moves
+

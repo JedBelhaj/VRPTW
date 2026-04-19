@@ -1,26 +1,25 @@
-import argparse
+﻿import argparse
 import csv
 from pathlib import Path
-from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def _load_rows(csv_path: Path) -> List[Dict[str, str]]:
+def _load_rows(csv_path):
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     return [row for row in rows if row.get("benchmark_stage") == "tabu"]
 
 
-def _as_float(row: Dict[str, str], key: str, fallback: str = "") -> float:
+def _as_float(row, key, fallback=""):
     value = row.get(key, "")
     if not value and fallback:
         value = row.get(fallback, "")
     return float(value)
 
 
-def generate_comparative_plot(csv_path: Path):
+def generate_comparative_plot(csv_path):
     rows = _load_rows(csv_path)
     if not rows:
         raise ValueError(f"No tabu benchmark rows found in {csv_path}")
@@ -86,3 +85,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

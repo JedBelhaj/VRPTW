@@ -1,10 +1,9 @@
-import json
+﻿import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict
 
 
-DEFAULT_CONFIG: Dict[str, Any] = {
+DEFAULT_CONFIG = {
     "mode": "single",
     "instance": "R105",
     "seed": 0,
@@ -40,7 +39,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 }
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def _deep_merge(base, override):
     result = deepcopy(base)
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
@@ -50,7 +49,7 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     return result
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
+def load_config(config_path):
     path = Path(config_path)
     if not path.is_absolute():
         root = Path(__file__).resolve().parents[2]
@@ -65,3 +64,4 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
     user_config = json.loads(raw)
     return _deep_merge(DEFAULT_CONFIG, user_config)
+

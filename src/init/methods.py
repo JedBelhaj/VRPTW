@@ -1,5 +1,4 @@
-from typing import Callable, Dict, List
-
+﻿
 from init.clarke_wright import clarke_wright_savings
 from init.greedy_insertion import greedy_insertion
 from init.random_feasible import random_feasible_solution
@@ -8,10 +7,7 @@ from init.sweep import sweep_algorithm
 from models.problem import ProblemInstance
 
 
-InitMethod = Callable[[ProblemInstance], List[List[int]]]
-
-
-def get_initial_methods(seed: int = 0) -> Dict[str, InitMethod]:
+def get_initial_methods(seed=0):
     return {
         "greedy": greedy_insertion,
         "solomon": solomon_i1,
@@ -19,3 +15,4 @@ def get_initial_methods(seed: int = 0) -> Dict[str, InitMethod]:
         "random": lambda p: random_feasible_solution(p, seed=seed),
         "sweep": sweep_algorithm,
     }
+

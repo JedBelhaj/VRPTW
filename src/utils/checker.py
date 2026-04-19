@@ -1,9 +1,8 @@
-from typing import Dict, List, Optional, Tuple
-
+﻿
 from models.problem import ProblemInstance
 
 
-def euclidean(problem: ProblemInstance, c1_id: int, c2_id: int) -> float:
+def euclidean(problem, c1_id, c2_id):
     c1 = problem.customers[c1_id]
     c2 = problem.customers[c2_id]
     dx = c1.x - c2.x
@@ -11,16 +10,16 @@ def euclidean(problem: ProblemInstance, c1_id: int, c2_id: int) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
-def clone_routes(routes: List[List[int]]) -> List[List[int]]:
+def clone_routes(routes):
     return [list(route) for route in routes]
 
 
-def route_load(problem: ProblemInstance, route: List[int]) -> float:
+def route_load(problem, route):
     return sum(problem.customers[cid].demand for cid in route[1:-1])
 
 
-def route_start_times(problem: ProblemInstance, route: List[int]) -> Optional[List[float]]:
-    starts: List[float] = []
+def route_start_times(problem, route):
+    starts = []
     time = 0.0
     current = route[0]
 
@@ -38,7 +37,7 @@ def route_start_times(problem: ProblemInstance, route: List[int]) -> Optional[Li
     return starts
 
 
-def evaluate_route(problem: ProblemInstance, route: List[int]) -> Tuple[bool, float, float, float]:
+def evaluate_route(problem, route):
     if len(route) < 2 or route[0] != problem.depot_id or route[-1] != problem.depot_id:
         return False, float("inf"), float("inf"), float("inf")
 
@@ -69,7 +68,7 @@ def evaluate_route(problem: ProblemInstance, route: List[int]) -> Tuple[bool, fl
     return True, distance, load, time
 
 
-def evaluate_solution(problem: ProblemInstance, routes: List[List[int]]) -> Tuple[bool, float, str]:
+def evaluate_solution(problem, routes):
     if len(routes) > problem.vehicle_count:
         return (
             False,
@@ -100,10 +99,10 @@ def evaluate_solution(problem: ProblemInstance, routes: List[List[int]]) -> Tupl
 
 
 def _best_feasible_insertion(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    customer_id: int,
-) -> Tuple[Optional[int], Optional[List[int]], float]:
+    problem,
+    routes,
+    customer_id,
+):
     best_route_idx = None
     best_route = None
     best_delta = float("inf")
@@ -129,10 +128,10 @@ def _best_feasible_insertion(
 
 
 def repair_to_vehicle_limit(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    target_vehicle_count: Optional[int] = None,
-) -> Optional[List[List[int]]]:
+    problem,
+    routes,
+    target_vehicle_count= None,
+):
     """Try to reduce route count by reinserting customers of one route into others.
 
     Returns repaired routes if successful, else None.
@@ -172,10 +171,10 @@ def repair_to_vehicle_limit(
 
 
 def maybe_repair_to_vehicle_limit(
-    problem: ProblemInstance,
-    routes: List[List[int]],
-    apply_fleet_repair: bool = True,
-) -> Tuple[List[List[int]], str]:
+    problem,
+    routes,
+    apply_fleet_repair= True,
+):
     if not apply_fleet_repair or len(routes) <= problem.vehicle_count:
         return routes, ""
 
@@ -186,7 +185,7 @@ def maybe_repair_to_vehicle_limit(
     return routes, " | fleet repair: failed"
 
 
-def best_insertion_position(problem: ProblemInstance, route: List[int], customer_id: int) -> Tuple[Optional[int], float]:
+def best_insertion_position(problem, route, customer_id):
     best_position = None
     best_cost = float("inf")
 

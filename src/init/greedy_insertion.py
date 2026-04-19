@@ -1,14 +1,13 @@
-from typing import List
-
+﻿
 from models.problem import ProblemInstance
 from utils.checker import evaluate_route
 
 
-def greedy_insertion(problem: ProblemInstance) -> List[List[int]]:
+def greedy_insertion(problem):
     """Build routes by repeatedly appending the nearest feasible unserved customer."""
     depot = problem.depot_id
     unserved = set(problem.customer_ids)
-    routes: List[List[int]] = []
+    routes = []
 
     while unserved:
         route = [depot, depot]
@@ -41,3 +40,4 @@ def greedy_insertion(problem: ProblemInstance) -> List[List[int]]:
         routes.append(route)
 
     return routes
+

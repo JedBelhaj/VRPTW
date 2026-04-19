@@ -1,10 +1,9 @@
-from typing import Dict, List, Tuple
-
+﻿
 from models.problem import ProblemInstance
 from utils.checker import evaluate_route
 
 
-def _distance(problem: ProblemInstance, i: int, j: int) -> float:
+def _distance(problem, i, j):
     c1 = problem.customers[i]
     c2 = problem.customers[j]
     dx = c1.x - c2.x
@@ -12,18 +11,18 @@ def _distance(problem: ProblemInstance, i: int, j: int) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
-def _find_route_index(routes: List[List[int]], customer_id: int) -> int:
+def _find_route_index(routes, customer_id):
     for idx, route in enumerate(routes):
         if customer_id in route[1:-1]:
             return idx
     return -1
 
 
-def clarke_wright_savings(problem: ProblemInstance) -> List[List[int]]:
+def clarke_wright_savings(problem):
     depot = problem.depot_id
     routes = [[depot, cid, depot] for cid in problem.customer_ids]
 
-    savings: List[Tuple[float, int, int]] = []
+    savings = []
     customers = problem.customer_ids
     for i in range(len(customers)):
         for j in range(i + 1, len(customers)):
@@ -61,3 +60,4 @@ def clarke_wright_savings(problem: ProblemInstance) -> List[List[int]]:
         routes.append(merged)
 
     return routes
+

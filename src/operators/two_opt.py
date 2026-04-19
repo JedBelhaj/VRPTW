@@ -1,12 +1,11 @@
-from typing import List
-
+﻿
 from models.problem import ProblemInstance
 from operators.move_types import MoveCandidate
 from utils.checker import clone_routes, evaluate_route
 
 
-def generate_two_opt_intra_moves(problem: ProblemInstance, routes: List[List[int]], max_moves: int = 120) -> List[MoveCandidate]:
-    moves: List[MoveCandidate] = []
+def generate_two_opt_intra_moves(problem, routes, max_moves=120):
+    moves = []
 
     for route_idx, route in enumerate(routes):
         if len(route) <= 4:
@@ -34,8 +33,8 @@ def generate_two_opt_intra_moves(problem: ProblemInstance, routes: List[List[int
     return moves
 
 
-def generate_two_opt_inter_moves(problem: ProblemInstance, routes: List[List[int]], max_moves: int = 120) -> List[MoveCandidate]:
-    moves: List[MoveCandidate] = []
+def generate_two_opt_inter_moves(problem, routes, max_moves=120):
+    moves = []
 
     for r1 in range(len(routes)):
         for r2 in range(r1 + 1, len(routes)):
@@ -76,3 +75,4 @@ def generate_two_opt_inter_moves(problem: ProblemInstance, routes: List[List[int
                         return moves
 
     return moves
+

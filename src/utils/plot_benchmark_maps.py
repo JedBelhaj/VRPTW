@@ -1,9 +1,8 @@
-import argparse
+﻿import argparse
 import csv
 import json
 from pathlib import Path
 import sys
-from typing import Dict, List
 
 import matplotlib.pyplot as plt
 
@@ -15,17 +14,17 @@ if str(SRC_ROOT) not in sys.path:
 from utils.parser import parse_instance
 
 
-def _load_rows(csv_path: Path) -> List[Dict[str, str]]:
+def _load_rows(csv_path):
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
-def _route_colors(count: int):
+def _route_colors(count):
     cmap = plt.get_cmap("tab20")
     return [cmap(i % 20) for i in range(count)]
 
 
-def _plot_solution(ax, problem, routes: List[List[int]], title: str):
+def _plot_solution(ax, problem, routes, title):
     depot = problem.customers[problem.depot_id]
     customer_points_x = [problem.customers[cid].x for cid in problem.customer_ids]
     customer_points_y = [problem.customers[cid].y for cid in problem.customer_ids]
@@ -45,14 +44,14 @@ def _plot_solution(ax, problem, routes: List[List[int]], title: str):
     ax.set_ylabel("y")
 
 
-def _distance_from_row(row: Dict[str, str], key: str, fallback_key: str) -> str:
+def _distance_from_row(row, key, fallback_key):
     val = row.get(key, "")
     if val:
         return val
     return row.get(fallback_key, "")
 
 
-def generate_maps(csv_path: Path):
+def generate_maps(csv_path):
     rows = _load_rows(csv_path)
     if not rows:
         raise ValueError(f"No rows in CSV: {csv_path}")
@@ -94,3 +93,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

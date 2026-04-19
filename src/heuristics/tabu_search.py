@@ -1,6 +1,5 @@
-import random
+﻿import random
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from heuristics.helpers import clean_routes, generate_candidates, is_inter_route_move, total_distance
 from init.methods import get_initial_methods
@@ -11,27 +10,27 @@ from utils.checker import clone_routes, evaluate_solution, maybe_repair_to_vehic
 
 
 def tabu_search(
-    problem: ProblemInstance,
-    initial_routes: List[List[int]],
-    iterations: int = 150,
-    tabu_tenure: int = 12,
-    aspiration: bool = True,
-    diversification_interval: int = 25,
-    intensification_interval: int = 20,
-    per_operator_moves: int = 40,
-    enabled_operators: Optional[List[str]] = None,
-    iteration_callback: Optional[Callable[[Dict], None]] = None,
-    apply_fleet_repair: bool = True,
-    random_seed: int = 0,
-    extra_verbose: bool = False,
-    tenure_increase_step: int = 2,
-    max_tabu_tenure: Optional[int] = None,
-    stagnation_top_k: int = 5,
-    perturbation_moves: int = 3,
-    enable_improvement_operator: bool = True,
-    improvement_interval: int = 30,
-    regret_k: int = 2,
-) -> Tuple[List[List[int]], float]:
+    problem,
+    initial_routes,
+    iterations=150,
+    tabu_tenure=12,
+    aspiration=True,
+    diversification_interval=25,
+    intensification_interval=20,
+    per_operator_moves=40,
+    enabled_operators=None,
+    iteration_callback=None,
+    apply_fleet_repair=True,
+    random_seed=0,
+    extra_verbose=False,
+    tenure_increase_step=2,
+    max_tabu_tenure=None,
+    stagnation_top_k=5,
+    perturbation_moves=3,
+    enable_improvement_operator=True,
+    improvement_interval=30,
+    regret_k=2,
+):
     rng = random.Random(random_seed)
     search_start = time.perf_counter()
 
@@ -44,7 +43,7 @@ def tabu_search(
     best = clone_routes(current)
     best_cost = current_cost
 
-    tabu: Dict[Tuple, int] = {}
+    tabu = {}
     no_improve = 0
     base_tabu_tenure = max(1, tabu_tenure)
     active_tabu_tenure = base_tabu_tenure
@@ -149,14 +148,14 @@ def tabu_search(
                 }
             )
 
-        admissible_candidates: List[MoveCandidate] = [
+        admissible_candidates = [
             cand
             for cand, row in zip(candidates, candidate_rows)
             if not row["is_tabu"] or row["can_aspire"]
         ]
 
         selection_mode = "greedy_best"
-        chosen: Optional[MoveCandidate] = None
+        chosen = None
         if admissible_candidates:
             if no_improve >= stagnation_trigger and len(admissible_candidates) > 1:
                 selection_mode = "stagnation_top_k_random"
@@ -315,7 +314,7 @@ def tabu_search(
     return best, best_cost
 
 
-def print_solution(method_name: str, routes: List[List[int]], distance: float, feasible: bool, message: str):
+def print_solution(method_name, routes, distance, feasible, message):
     print("=" * 72)
     print(f"Method: {method_name}")
     print(f"Feasible: {feasible}")
@@ -327,7 +326,7 @@ def print_solution(method_name: str, routes: List[List[int]], distance: float, f
         print(f"Route {index}: {' -> '.join(str(node) for node in route)}")
 
 
-def _print_tabu_iteration(payload: Dict):
+def _print_tabu_iteration(payload):
     iteration = payload.get("iteration", -1)
     phase = payload.get("event", "unknown")
     current_cost = payload.get("current_cost", float("inf"))
@@ -365,35 +364,35 @@ def _print_tabu_iteration(payload: Dict):
     )
 
 
-def _get_problem(instance: str) -> ProblemInstance:
+def _get_problem(instance):
     from utils.parser import parse_instance
 
     return parse_instance(instance)
 
 
 def run_tabu_from_method(
-    instance: str,
-    seed: int,
-    method: str,
-    iterations: int,
-    tabu_tenure: int,
-    aspiration: bool,
-    diversification_interval: int,
-    intensification_interval: int,
-    per_operator_moves: int,
-    enabled_operators: Optional[List[str]],
-    apply_fleet_repair: bool = True,
-    extra_verbose: bool = False,
-    print_iterations: bool = True,
-    iteration_callback: Optional[Callable[[Dict], None]] = None,
-    tenure_increase_step: int = 2,
-    max_tabu_tenure: Optional[int] = None,
-    stagnation_top_k: int = 5,
-    perturbation_moves: int = 3,
-    enable_improvement_operator: bool = True,
-    improvement_interval: int = 30,
-    regret_k: int = 2,
-) -> Dict[str, Any]:
+    instance,
+    seed,
+    method,
+    iterations,
+    tabu_tenure,
+    aspiration,
+    diversification_interval,
+    intensification_interval,
+    per_operator_moves,
+    enabled_operators,
+    apply_fleet_repair=True,
+    extra_verbose=False,
+    print_iterations=True,
+    iteration_callback=None,
+    tenure_increase_step=2,
+    max_tabu_tenure=None,
+    stagnation_top_k=5,
+    perturbation_moves=3,
+    enable_improvement_operator=True,
+    improvement_interval=30,
+    regret_k=2,
+):
     overall_start = time.perf_counter()
     problem = _get_problem(instance)
     methods = get_initial_methods(seed=seed)
@@ -434,9 +433,9 @@ def run_tabu_from_method(
         f"Starting tabu from {method} | init_distance={distance:.2f} | routes={len(routes)} | init_time={init_elapsed:.3f}s"
     )
 
-    callback: Optional[Callable[[Dict], None]] = None
+    callback = None
     if print_iterations or iteration_callback is not None:
-        def _dispatch(payload: Dict):
+        def _dispatch(payload):
             if print_iterations:
                 _print_tabu_iteration(payload)
             if iteration_callback is not None:
@@ -492,3 +491,4 @@ def run_tabu_from_method(
         "capacity": problem.capacity,
         "message": message,
     }
+

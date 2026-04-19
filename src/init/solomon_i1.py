@@ -1,10 +1,9 @@
-from typing import List, Tuple
-
+﻿
 from models.problem import ProblemInstance
 from utils.checker import evaluate_route, route_start_times
 
 
-def _distance(problem: ProblemInstance, i: int, j: int) -> float:
+def _distance(problem, i, j):
     c1 = problem.customers[i]
     c2 = problem.customers[j]
     dx = c1.x - c2.x
@@ -13,12 +12,12 @@ def _distance(problem: ProblemInstance, i: int, j: int) -> float:
 
 
 def _best_position_cost(
-    problem: ProblemInstance,
-    route: List[int],
-    customer_id: int,
-    alpha1: float,
-    alpha2: float,
-) -> Tuple[int, float]:
+    problem,
+    route,
+    customer_id,
+    alpha1,
+    alpha2,
+):
     base_starts = route_start_times(problem, route)
     if base_starts is None:
         return -1, float("inf")
@@ -56,13 +55,13 @@ def _best_position_cost(
 
 
 def solomon_i1(
-    problem: ProblemInstance,
-    alpha1: float = 1.0,
-    alpha2: float = 0.0,
-    lam: float = 1.0,
-) -> List[List[int]]:
+    problem,
+    alpha1= 1.0,
+    alpha2= 0.0,
+    lam= 1.0,
+):
     unserved = sorted(problem.customer_ids, key=lambda cid: problem.customers[cid].due_time)
-    routes: List[List[int]] = []
+    routes = []
     depot = problem.depot_id
 
     while unserved:
@@ -97,3 +96,4 @@ def solomon_i1(
         routes.append(route)
 
     return routes
+
