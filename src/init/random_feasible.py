@@ -3,8 +3,8 @@
 from utils.checker import evaluate_route
 
 
-def random_feasible_solution(problem, seed=0):
-    rng = random.Random(seed)
+def random_feasible_solution(problem):
+    rng = random.Random()
     depot = problem.depot_id
     customers = list(problem.customer_ids)
     rng.shuffle(customers)
@@ -13,8 +13,14 @@ def random_feasible_solution(problem, seed=0):
 
     for customer_id in customers:
         inserted = False
-        for r_idx, route in enumerate(routes):
-            for pos in range(1, len(route)):
+        route_indices = list(range(len(routes)))
+        rng.shuffle(route_indices)
+
+        for r_idx in route_indices:
+            route = routes[r_idx]
+            positions = list(range(1, len(route)))
+            rng.shuffle(positions)
+            for pos in positions:
                 candidate = route[:pos] + [customer_id] + route[pos:]
                 feasible, _, _, _ = evaluate_route(problem, candidate)
                 if feasible:

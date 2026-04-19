@@ -18,7 +18,6 @@ def tabu_search(
     per_operator_moves=40,
     enabled_operators=None,
     iteration_callback=None,
-    random_seed=0,
     tenure_increase_step=2,
     max_tabu_tenure=None,
     stagnation_top_k=5,
@@ -27,7 +26,7 @@ def tabu_search(
     improvement_interval=30,
     regret_k=2,
 ):
-    rng = random.Random(random_seed)
+    rng = random.Random()
     search_start = time.perf_counter()
 
     current = clean_routes(problem, clone_routes(initial_routes))
@@ -150,7 +149,7 @@ def tabu_search(
                 chosen = admissible[0]
 
         if chosen is None:
-            methods = get_initial_methods(seed=rng.randint(0, 10_000))
+            methods = get_initial_methods()
             restart_routes = clean_routes(problem, methods["random"](problem))
             current = restart_routes
             current_cost = total_distance(problem, restart_routes)
@@ -217,7 +216,7 @@ def tabu_search(
                 current_cost = total_distance(problem, current)
                 event = "diversification_perturbation"
             else:
-                methods = get_initial_methods(seed=rng.randint(0, 10_000))
+                methods = get_initial_methods()
                 current = clean_routes(problem, methods["random"](problem))
                 current_cost = total_distance(problem, current)
                 event = "diversification_restart"
@@ -313,7 +312,6 @@ def _get_problem(instance):
 
 def run_tabu_from_method(
     instance,
-    seed,
     method,
     iterations,
     tabu_tenure,
@@ -334,7 +332,7 @@ def run_tabu_from_method(
 ):
     overall_start = time.perf_counter()
     problem = _get_problem(instance)
-    methods = get_initial_methods(seed=seed)
+    methods = get_initial_methods()
 
     if method not in methods:
         raise ValueError(f"Unknown tabu start method: {method}")
@@ -391,7 +389,6 @@ def run_tabu_from_method(
         per_operator_moves=per_operator_moves,
         enabled_operators=enabled_operators,
         iteration_callback=callback,
-        random_seed=seed,
         tenure_increase_step=tenure_increase_step,
         max_tabu_tenure=max_tabu_tenure,
         stagnation_top_k=stagnation_top_k,

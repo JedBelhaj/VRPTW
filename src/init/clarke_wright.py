@@ -1,4 +1,6 @@
-﻿from utils.checker import evaluate_route
+﻿import random
+
+from utils.checker import evaluate_route
 from utils.distance import euclidean_by_id
 
 
@@ -10,11 +12,13 @@ def _find_route_index(routes, customer_id):
 
 
 def clarke_wright_savings(problem):
+    rng = random.Random()
     depot = problem.depot_id
     routes = [[depot, cid, depot] for cid in problem.customer_ids]
 
     savings = []
-    customers = problem.customer_ids
+    customers = list(problem.customer_ids)
+    rng.shuffle(customers)
     for i in range(len(customers)):
         for j in range(i + 1, len(customers)):
             ci = customers[i]
@@ -22,6 +26,7 @@ def clarke_wright_savings(problem):
             saving = euclidean_by_id(problem, depot, ci) + euclidean_by_id(problem, depot, cj) - euclidean_by_id(problem, ci, cj)
             savings.append((saving, ci, cj))
 
+    rng.shuffle(savings)
     savings.sort(reverse=True, key=lambda x: x[0])
 
     for _, i, j in savings:

@@ -1,4 +1,5 @@
 ﻿import math
+import random
 
 from utils.checker import evaluate_route
 from utils.distance import euclidean_by_id
@@ -11,8 +12,13 @@ def _angle(problem, customer_id):
 
 
 def sweep_algorithm(problem):
-    depot = problem.depot_id
+    rng = random.Random()
     ordered = sorted(problem.customer_ids, key=lambda cid: _angle(problem, cid))
+    if ordered:
+        start = rng.randrange(len(ordered))
+        ordered = ordered[start:] + ordered[:start]
+        if rng.random() < 0.5:
+            ordered.reverse()
 
     routes = []
     current_cluster = []
@@ -21,7 +27,7 @@ def sweep_algorithm(problem):
     for customer_id in ordered:
         demand = problem.customers[customer_id].demand
         if current_cluster and current_load + demand > problem.capacity:
-            routes.extend(_build_cluster_routes(problem, current_cluster))
+            routes.extend(_build_cluster_routes(problem, current_cluster, rng))
             current_cluster = []
             current_load = 0
 
@@ -29,12 +35,12 @@ def sweep_algorithm(problem):
         current_load += demand
 
     if current_cluster:
-        routes.extend(_build_cluster_routes(problem, current_cluster))
+        routes.extend(_build_cluster_routes(problem, current_cluster, rng))
 
     return routes
 
 
-def _build_cluster_routes(problem, cluster):
+def _build_cluster_routes(problem, cluster, rng):
     depot = problem.depot_id
     routes = []
     unserved = set(cluster)
@@ -42,11 +48,13 @@ def _build_cluster_routes(problem, cluster):
     while unserved:
         route = [depot, depot]
         while True:
-            best = None
+            best_customers = []
             best_distance = float("inf")
             current = route[-2]
 
-            for customer_id in list(unserved):
+            candidates = list(unserved)
+            rng.shuffle(candidates)
+            for customer_id in candidates:
                 candidate = route[:-1] + [customer_id, depot]
                 feasible, _, _, _ = evaluate_route(problem, candidate)
                 if not feasible:
@@ -55,11 +63,14 @@ def _build_cluster_routes(problem, cluster):
                 d = euclidean_by_id(problem, current, customer_id)
                 if d < best_distance:
                     best_distance = d
-                    best = customer_id
+                    best_customers = [customer_id]
+                elif d == best_distance:
+                    best_customers.append(customer_id)
 
-            if best is None:
+            if not best_customers:
                 break
 
+            best = rng.choice(best_customers)
             route = route[:-1] + [best, depot]
             unserved.remove(best)
 

@@ -1,4 +1,6 @@
-﻿from utils.checker import evaluate_route, route_start_times
+﻿import random
+
+from utils.checker import evaluate_route, route_start_times
 from utils.distance import euclidean_by_id
 
 
@@ -55,23 +57,26 @@ def solomon_i1(
     alpha2=0.0,
     lam=1.0,
 ):
+    rng = random.Random()
     unserved = sorted(problem.customer_ids, key=lambda cid: problem.customers[cid].due_time)
     routes = []
     depot = problem.depot_id
 
     while unserved:
-        seed = unserved.pop(0)
-        route = [depot, seed, depot]
+        seed_pool_size = max(1, min(5, len(unserved)))
+        start_customer = unserved.pop(rng.randrange(seed_pool_size))
+        route = [depot, start_customer, depot]
         feasible, _, _, _ = evaluate_route(problem, route)
         if not feasible:
-            raise ValueError(f"Seed customer {seed} is infeasible as single route.")
+            raise ValueError(f"Start customer {start_customer} is infeasible as single route.")
 
         while True:
-            best_customer = None
-            best_pos = -1
+            best_moves = []
             best_c2 = float("-inf")
 
-            for customer_id in unserved:
+            candidates = list(unserved)
+            rng.shuffle(candidates)
+            for customer_id in candidates:
                 pos, c1 = _best_position_cost(problem, route, customer_id, alpha1, alpha2)
                 if pos == -1:
                     continue
@@ -79,12 +84,14 @@ def solomon_i1(
                 c2 = lam * euclidean_by_id(problem, depot, customer_id) - c1
                 if c2 > best_c2:
                     best_c2 = c2
-                    best_customer = customer_id
-                    best_pos = pos
+                    best_moves = [(customer_id, pos)]
+                elif c2 == best_c2:
+                    best_moves.append((customer_id, pos))
 
-            if best_customer is None:
+            if not best_moves:
                 break
 
+            best_customer, best_pos = rng.choice(best_moves)
             route = route[:best_pos] + [best_customer] + route[best_pos:]
             unserved.remove(best_customer)
 

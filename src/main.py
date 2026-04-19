@@ -2,7 +2,6 @@ from heuristics.tabu_search import run_tabu_from_method as tabu_run_tabu_from_me
 
 # Single-instance run settings
 INSTANCE = "C201"
-SEED = 0
 TABU_START_METHOD = "solomon"
 TABU_ITERATIONS = 100
 TABU_TENURE = 15
@@ -18,10 +17,9 @@ PRINT_ITERATIONS = True
 
 
 def main():
-    print(f"Running Tabu on {INSTANCE} (seed={SEED}, start={TABU_START_METHOD})")
+    print(f"Running Tabu on {INSTANCE} (start={TABU_START_METHOD})")
     tabu_run_tabu_from_method(
         instance=INSTANCE,
-        seed=SEED,
         method=TABU_START_METHOD,
         iterations=TABU_ITERATIONS,
         tabu_tenure=TABU_TENURE,

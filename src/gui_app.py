@@ -86,7 +86,6 @@ class App(tk.Tk):
 
         self.instance_var = tk.StringVar(value="R108")
         self.instance_file_var = tk.StringVar(value="")
-        self.seed_var = tk.StringVar(value="0")
         self.mode_var = tk.StringVar(value="tabu")
         self.init_method_var = tk.StringVar(value="solomon")
 
@@ -106,38 +105,37 @@ class App(tk.Tk):
         }
 
         self._row(left, 0, "Instance name", self._instance_picker(left))
-        self._row(left, 1, "Seed", ttk.Entry(left, textvariable=self.seed_var))
-        self._row(left, 2, "Mode", self._mode_picker(left))
-        self._row(left, 3, "Init method", ttk.Combobox(left, textvariable=self.init_method_var, values=ALL_METHODS, state="readonly"))
+        self._row(left, 1, "Mode", self._mode_picker(left))
+        self._row(left, 2, "Init method", ttk.Combobox(left, textvariable=self.init_method_var, values=ALL_METHODS, state="readonly"))
 
-        ttk.Separator(left).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        ttk.Separator(left).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 8))
 
-        self._row(left, 5, "Tabu iterations", ttk.Entry(left, textvariable=self.iterations_var))
-        self._row(left, 6, "Tabu tenure", ttk.Entry(left, textvariable=self.tabu_tenure_var))
+        self._row(left, 4, "Tabu iterations", ttk.Entry(left, textvariable=self.iterations_var))
+        self._row(left, 5, "Tabu tenure", ttk.Entry(left, textvariable=self.tabu_tenure_var))
 
         aspiration_check = ttk.Checkbutton(left, text="Use aspiration", variable=self.aspiration_var)
-        aspiration_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=4)
+        aspiration_check.grid(row=6, column=0, columnspan=2, sticky="w", pady=4)
 
-        self._row(left, 8, "Diversification", ttk.Entry(left, textvariable=self.div_interval_var))
-        self._row(left, 9, "Intensification", ttk.Entry(left, textvariable=self.int_interval_var))
-        self._row(left, 10, "Moves / operator", ttk.Entry(left, textvariable=self.per_op_moves_var))
+        self._row(left, 7, "Diversification", ttk.Entry(left, textvariable=self.div_interval_var))
+        self._row(left, 8, "Intensification", ttk.Entry(left, textvariable=self.int_interval_var))
+        self._row(left, 9, "Moves / operator", ttk.Entry(left, textvariable=self.per_op_moves_var))
 
         ttk.Checkbutton(
             left,
             text="Enable improvement operator",
             variable=self.enable_improvement_operator_var,
-        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(6, 2))
-        self._row(left, 12, "Improvement interval", ttk.Entry(left, textvariable=self.improvement_interval_var))
-        self._row(left, 13, "Improvement regret_k", ttk.Entry(left, textvariable=self.improvement_regret_k_var))
+        ).grid(row=10, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        self._row(left, 11, "Improvement interval", ttk.Entry(left, textvariable=self.improvement_interval_var))
+        self._row(left, 12, "Improvement regret_k", ttk.Entry(left, textvariable=self.improvement_regret_k_var))
 
         ttk.Checkbutton(
             left,
             text="Show iteration details",
             variable=self.show_iteration_details_var,
-        ).grid(row=14, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        ).grid(row=13, column=0, columnspan=2, sticky="w", pady=(6, 2))
 
         ops_frame = ttk.Frame(left, style="Panel.TFrame")
-        ops_frame.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ops_frame.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Label(ops_frame, text="Tabu operators", style="Field.TLabel").grid(row=0, column=0, sticky="w")
 
         for idx, name in enumerate(TABU_OPERATORS, start=1):
@@ -149,8 +147,8 @@ class App(tk.Tk):
             )
 
         self.run_button = ttk.Button(left, text="Run", command=self._run_clicked)
-        self.run_button.grid(row=16, column=0, sticky="ew", pady=(12, 0))
-        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=16, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
+        self.run_button.grid(row=15, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(left, text="Clear Output", command=self._clear_output).grid(row=15, column=1, sticky="ew", pady=(12, 0), padx=(8, 0))
 
         self.status_var = tk.StringVar(value="Ready")
         status_row = ttk.Frame(right, style="Panel.TFrame")
@@ -323,7 +321,6 @@ class App(tk.Tk):
 
         return {
             "instance": instance_value,
-            "seed": int(self.seed_var.get()),
             "mode": self.mode_var.get(),
             "init_method": self.init_method_var.get(),
             "iterations": int(self.iterations_var.get()),
@@ -356,7 +353,7 @@ class App(tk.Tk):
     def _run_initial(self, config: dict) -> str:
         problem = parse_instance(config["instance"])
         self._result_queue.put(("map_init", self._map_payload(problem)))
-        methods = get_initial_methods(seed=config["seed"])
+        methods = get_initial_methods()
         method_name = config["init_method"]
         if method_name not in methods:
             raise ValueError(f"Unknown init method: {method_name}")
@@ -403,7 +400,6 @@ class App(tk.Tk):
 
         row = run_tabu_from_method(
             instance=config["instance"],
-            seed=config["seed"],
             method=config["init_method"],
             iterations=config["iterations"],
             tabu_tenure=config["tabu_tenure"],

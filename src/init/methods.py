@@ -6,12 +6,12 @@ from init.solomon_i1 import solomon_i1
 from init.sweep import sweep_algorithm
 
 
-def get_initial_methods(seed=0):
+def get_initial_methods():
     return {
         "greedy": greedy_insertion,
         "solomon": solomon_i1,
         "clarke_wright": clarke_wright_savings,
-        "random": lambda p: random_feasible_solution(p, seed=seed),
+        "random": random_feasible_solution,
         "sweep": sweep_algorithm,
     }
 
