@@ -33,16 +33,57 @@ def is_inter_route_move(move_key):
 def generate_candidates(
     problem,
     routes,
-    per_operator,
+    total_moves,
     enabled_operators,
+    operator_percentages=None,
 ):
     candidates = []
     generators = operator_generators()
 
-    for operator in enabled_operators:
-        if operator not in generators:
+    active_operators = [op for op in enabled_operators if op in generators]
+    if not active_operators:
+        return candidates
+
+    total_moves = max(1, int(total_moves))
+    operator_percentages = operator_percentages or {}
+
+    weights = {}
+    for operator in active_operators:
+        raw = operator_percentages.get(operator, 0.0)
+        try:
+            weight = float(raw)
+        except (TypeError, ValueError):
+            weight = 0.0
+        weights[operator] = max(0.0, weight)
+
+    total_weight = sum(weights.values())
+    if total_weight <= 0.0:
+        for operator in active_operators:
+            weights[operator] = 1.0
+        total_weight = float(len(active_operators))
+
+    raw_alloc = {
+        operator: (total_moves * weights[operator]) / total_weight for operator in active_operators
+    }
+    budgets = {operator: int(raw_alloc[operator]) for operator in active_operators}
+    assigned = sum(budgets.values())
+    remaining = max(0, total_moves - assigned)
+
+    if remaining > 0:
+        ranked = sorted(
+            active_operators,
+            key=lambda op: (raw_alloc[op] - budgets[op], weights[op]),
+            reverse=True,
+        )
+        for idx in range(remaining):
+            operator = ranked[idx % len(ranked)]
+            budgets[operator] += 1
+
+    for operator in active_operators:
+        max_moves = budgets.get(operator, 0)
+        if max_moves <= 0:
             continue
-        candidates.extend(generators[operator](problem, routes, max_moves=per_operator))
+        candidates.extend(generators[operator](problem, routes, max_moves=max_moves))
 
     for cand in candidates:
         cand.routes = clean_routes(problem, cand.routes)

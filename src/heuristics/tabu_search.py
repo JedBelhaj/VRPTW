@@ -8,6 +8,16 @@ from utils.checker import clone_routes, evaluate_solution
 from utils.parser import parse_instance
 
 
+DEFAULT_OPERATOR_PERCENTAGES = {
+    "relocate": 25.0,
+    "swap": 20.0,
+    "two_opt_intra": 15.0,
+    "two_opt_inter": 15.0,
+    "or_opt": 15.0,
+    "cross_exchange": 10.0,
+}
+
+
 def normalize_move_key(move_key):
     """Builds a stable, less-fragmented tabu key for move memory."""
     if not move_key:
@@ -51,7 +61,8 @@ def tabu_search(
     aspiration=True,
     diversification_interval=25,
     intensification_interval=20,
-    per_operator_moves=80,
+    total_neighbors=300,
+    operator_percentages=None,
     enabled_operators=None,
     iteration_callback=None,
     tenure_increase_step=2,
@@ -78,8 +89,8 @@ def tabu_search(
     base_tabu_tenure = max(1, tabu_tenure, adaptive_tenure_floor)
     active_tabu_tenure = base_tabu_tenure
 
-    adaptive_per_operator_moves = max(80, customer_count)
-    per_operator_moves = max(1, per_operator_moves, adaptive_per_operator_moves)
+    total_neighbors = max(1, int(total_neighbors))
+    operator_percentages = operator_percentages or DEFAULT_OPERATOR_PERCENTAGES
 
     adaptive_perturbation_floor = min(10, max(5, customer_count // 10))
     perturbation_moves = max(1, perturbation_moves, adaptive_perturbation_floor)
@@ -128,7 +139,13 @@ def tabu_search(
             continue
 
         # 2. Neighborhood Search
-        candidates = generate_candidates(problem, current, per_operator=per_operator_moves, enabled_operators=operators)
+        candidates = generate_candidates(
+            problem,
+            current,
+            total_moves=total_neighbors,
+            enabled_operators=operators,
+            operator_percentages=operator_percentages,
+        )
         
         # Ensure candidates are sorted by objective (Best to Worst)
         candidates.sort(key=lambda x: x.objective)
@@ -187,7 +204,16 @@ def tabu_search(
         # 4. Diversification (Perturbation)
         if diversification_interval > 0 and no_improve >= diversification_interval:
             event = "diversification_perturbation"
-            current = apply_perturbation(problem, current, operators, perturbation_moves, stagnation_top_k, rng)
+            current = apply_perturbation(
+                problem,
+                current,
+                operators,
+                operator_percentages,
+                perturbation_moves,
+                stagnation_top_k,
+                total_neighbors,
+                rng,
+            )
             current_cost = total_distance(problem, current)
             no_improve = 0
             active_tabu_tenure = base_tabu_tenure
@@ -206,11 +232,17 @@ def tabu_search(
     return best, best_cost
 
 
-def apply_perturbation(problem, routes, operators, moves, top_k_val, rng):
+def apply_perturbation(problem, routes, operators, operator_percentages, moves, top_k_val, total_neighbors, rng):
     """Applies a series of random inter-route moves to jump out of local optima."""
     perturbed = clone_routes(routes)
     for _ in range(max(1, moves)):
-        cands = generate_candidates(problem, perturbed, per_operator=20, enabled_operators=operators)
+        cands = generate_candidates(
+            problem,
+            perturbed,
+            total_moves=max(20, total_neighbors // 2),
+            enabled_operators=operators,
+            operator_percentages=operator_percentages,
+        )
         if not cands: break
         # Prefer inter-route moves for diversification
         inter = [c for c in cands if is_inter_route_move(c.move_key)]
@@ -242,7 +274,8 @@ def run_tabu_from_method(
     aspiration=True,
     diversification_interval=25,
     intensification_interval=20,
-    per_operator_moves=40,
+    total_neighbors=300,
+    operator_percentages=None,
     enabled_operators=None,
     print_iterations=False,
     iteration_callback=None,
@@ -290,7 +323,8 @@ def run_tabu_from_method(
         aspiration=aspiration,
         diversification_interval=diversification_interval,
         intensification_interval=intensification_interval,
-        per_operator_moves=per_operator_moves,
+        total_neighbors=total_neighbors,
+        operator_percentages=operator_percentages,
         enabled_operators=enabled_operators,
         iteration_callback=_iteration_bridge,
         tenure_increase_step=tenure_increase_step,

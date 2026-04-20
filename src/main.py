@@ -8,8 +8,16 @@ TABU_TENURE = 20
 TABU_ASPIRATION = True
 TABU_DIVERSIFICATION_INTERVAL = 35
 TABU_INTENSIFICATION_INTERVAL = 15
-TABU_PER_OPERATOR_MOVES = 80
+TABU_TOTAL_NEIGHBORS = 300
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
+TABU_OPERATOR_PERCENTAGES = {
+    "relocate": 25.0,
+    "swap": 20.0,
+    "two_opt_intra": 15.0,
+    "two_opt_inter": 15.0,
+    "or_opt": 15.0,
+    "cross_exchange": 10.0,
+}
 ENABLE_IMPROVEMENT_OPERATOR = True
 IMPROVEMENT_INTERVAL = 30
 IMPROVEMENT_REGRET_K = 2
@@ -26,7 +34,8 @@ def main():
         aspiration=TABU_ASPIRATION,
         diversification_interval=TABU_DIVERSIFICATION_INTERVAL,
         intensification_interval=TABU_INTENSIFICATION_INTERVAL,
-        per_operator_moves=TABU_PER_OPERATOR_MOVES,
+        total_neighbors=TABU_TOTAL_NEIGHBORS,
+        operator_percentages=TABU_OPERATOR_PERCENTAGES,
         enabled_operators=TABU_OPERATORS,
         print_iterations=PRINT_ITERATIONS,
         enable_improvement_operator=ENABLE_IMPROVEMENT_OPERATOR,

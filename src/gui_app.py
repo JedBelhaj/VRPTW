@@ -15,6 +15,14 @@ from utils.parser import parse_instance
 
 ALL_METHODS = ["greedy", "solomon", "clarke_wright", "random", "sweep"]
 TABU_OPERATORS = ["relocate", "swap", "two_opt_intra", "two_opt_inter", "or_opt", "cross_exchange"]
+DEFAULT_OPERATOR_PERCENTAGES = {
+    "relocate": 25.0,
+    "swap": 20.0,
+    "two_opt_intra": 15.0,
+    "two_opt_inter": 15.0,
+    "or_opt": 15.0,
+    "cross_exchange": 10.0,
+}
 
 
 class App(tk.Tk):
@@ -94,7 +102,7 @@ class App(tk.Tk):
         self.aspiration_var = tk.BooleanVar(value=True)
         self.div_interval_var = tk.StringVar(value="35")
         self.int_interval_var = tk.StringVar(value="15")
-        self.per_op_moves_var = tk.StringVar(value="80")
+        self.total_neighbors_var = tk.StringVar(value="300")
         self.enable_improvement_operator_var = tk.BooleanVar(value=True)
         self.improvement_interval_var = tk.StringVar(value="30")
         self.improvement_regret_k_var = tk.StringVar(value="2")
@@ -102,6 +110,10 @@ class App(tk.Tk):
 
         self.operator_vars: dict[str, tk.BooleanVar] = {
             name: tk.BooleanVar(value=True) for name in TABU_OPERATORS
+        }
+        self.operator_pct_vars: dict[str, tk.StringVar] = {
+            name: tk.StringVar(value=str(DEFAULT_OPERATOR_PERCENTAGES.get(name, 0.0)))
+            for name in TABU_OPERATORS
         }
 
         self._row(left, 0, "Instance name", self._instance_picker(left))
@@ -118,7 +130,7 @@ class App(tk.Tk):
 
         self._row(left, 7, "Diversification", ttk.Entry(left, textvariable=self.div_interval_var))
         self._row(left, 8, "Intensification", ttk.Entry(left, textvariable=self.int_interval_var))
-        self._row(left, 9, "Moves / operator", ttk.Entry(left, textvariable=self.per_op_moves_var))
+        self._row(left, 9, "Total neighbors / iter", ttk.Entry(left, textvariable=self.total_neighbors_var))
 
         ttk.Checkbutton(
             left,
@@ -137,12 +149,20 @@ class App(tk.Tk):
         ops_frame = ttk.Frame(left, style="Panel.TFrame")
         ops_frame.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Label(ops_frame, text="Tabu operators", style="Field.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(ops_frame, text="Percent (%)", style="Field.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
 
         for idx, name in enumerate(TABU_OPERATORS, start=1):
             ttk.Checkbutton(ops_frame, text=name, variable=self.operator_vars[name]).grid(
                 row=idx,
                 column=0,
                 sticky="w",
+                pady=1,
+            )
+            ttk.Entry(ops_frame, textvariable=self.operator_pct_vars[name], width=8).grid(
+                row=idx,
+                column=1,
+                sticky="w",
+                padx=(10, 0),
                 pady=1,
             )
 
@@ -319,6 +339,23 @@ class App(tk.Tk):
         if not instance_value:
             raise ValueError("Instance is required.")
 
+        total_neighbors = int(self.total_neighbors_var.get())
+        if total_neighbors <= 0:
+            raise ValueError("Total neighbors / iter must be > 0.")
+
+        operator_percentages: dict[str, float] = {}
+        for name, var in self.operator_pct_vars.items():
+            pct = float(var.get())
+            if pct < 0.0:
+                raise ValueError(f"Operator percentage cannot be negative: {name}")
+            operator_percentages[name] = pct
+
+        enabled_operators = [name for name, enabled in self.operator_vars.items() if enabled.get()]
+        if self.mode_var.get() == "tabu" and enabled_operators:
+            enabled_sum = sum(operator_percentages[name] for name in enabled_operators)
+            if enabled_sum <= 0.0:
+                raise ValueError("Sum of percentages for enabled operators must be > 0.")
+
         return {
             "instance": instance_value,
             "mode": self.mode_var.get(),
@@ -328,11 +365,12 @@ class App(tk.Tk):
             "aspiration": self.aspiration_var.get(),
             "diversification_interval": int(self.div_interval_var.get()),
             "intensification_interval": int(self.int_interval_var.get()),
-            "per_operator_moves": int(self.per_op_moves_var.get()),
+            "total_neighbors": total_neighbors,
+            "operator_percentages": operator_percentages,
             "enable_improvement_operator": self.enable_improvement_operator_var.get(),
             "improvement_interval": int(self.improvement_interval_var.get()),
             "improvement_regret_k": int(self.improvement_regret_k_var.get()),
-            "enabled_operators": [name for name, enabled in self.operator_vars.items() if enabled.get()],
+            "enabled_operators": enabled_operators,
             "show_iteration_details": self.show_iteration_details_var.get(),
         }
 
@@ -406,7 +444,8 @@ class App(tk.Tk):
             aspiration=config["aspiration"],
             diversification_interval=config["diversification_interval"],
             intensification_interval=config["intensification_interval"],
-            per_operator_moves=config["per_operator_moves"],
+            total_neighbors=config["total_neighbors"],
+            operator_percentages=config["operator_percentages"],
             enabled_operators=config["enabled_operators"],
             print_iterations=False,
             iteration_callback=ui_iteration_callback,
