@@ -111,34 +111,17 @@ def tabu_search(
         "iteration": 0, "event": "start", "current_cost": current_cost,
         "best_cost": best_cost, "operators": operators,
         "active_tabu_tenure": active_tabu_tenure, "elapsed_sec": 0.0,
+        "candidate_count": 0, "tabu_size": len(tabu), "selection_mode": "start",
+        "periodic_improvement_attempted": False,
+        "periodic_improvement_applied": False,
         "current_routes": clone_routes(current), "best_routes": clone_routes(best),
     })
 
     for it in range(1, iterations + 1):
         periodic_improvement_attempted = False
         periodic_improvement_applied = False
-        
-        # 1. Periodic Heavy Improvement (Regret Reinsertion)
-        if enable_improvement_operator and improvement_interval > 0 and it % improvement_interval == 0:
-            periodic_improvement_attempted = True
-            improved_routes, improved = destroy_smallest_route_regret_reinsert(
-                problem, current, regret_k=regret_k
-            )
-            if improved:
-                improved_cost = total_distance(problem, improved_routes)
-                if improved_cost < current_cost:
-                    periodic_improvement_applied = True
-                    current, current_cost = improved_routes, improved_cost
-                    if current_cost < best_cost:
-                        best, best_cost = clone_routes(current), current_cost
-                        no_improve = 0
-                        active_tabu_tenure = base_tabu_tenure
-            
-            # If this was an improvement-only step, we skip the standard move logic
-            emit_payload(it, "improvement_check", None, current_cost, best_cost, tabu, active_tabu_tenure, 0, periodic_improvement_attempted, periodic_improvement_applied, search_start, current, best, "improvement_only", emit)
-            continue
 
-        # 2. Neighborhood Search
+        # 1. Neighborhood Search
         candidates = generate_candidates(
             problem,
             current,
@@ -173,7 +156,7 @@ def tabu_search(
             selection_mode = "least_tabu_fallback"
             chosen = min(candidates, key=lambda c: tabu.get(normalize_move_key(c.move_key), 0))
         
-        # 3. Apply Move
+        # 2. Apply Move
         if chosen:
             current = chosen.routes
             current_cost = chosen.objective
@@ -192,6 +175,25 @@ def tabu_search(
                 # Dynamic Tenure: Increase if stagnating
                 if no_improve >= stagnation_trigger:
                     active_tabu_tenure = min(max_tenure, active_tabu_tenure + tenure_increase_step)
+
+            # 3. Post-move Heavy Improvement (Regret Reinsertion)
+            if enable_improvement_operator and improvement_interval > 0 and it % improvement_interval == 0:
+                periodic_improvement_attempted = True
+                improved_routes, improved = destroy_smallest_route_regret_reinsert(
+                    problem, current, regret_k=regret_k
+                )
+                if improved:
+                    improved_cost = total_distance(problem, improved_routes)
+                    if improved_cost < current_cost:
+                        periodic_improvement_applied = True
+                        current, current_cost = improved_routes, improved_cost
+                        if current_cost < (best_cost - 1e-6):
+                            best, best_cost = clone_routes(current), current_cost
+                            no_improve = 0
+                            active_tabu_tenure = base_tabu_tenure
+                            event = "improvement_post_move"
+                        elif event != "improvement":
+                            event = "post_move_refine"
         else:
             # Extreme case: No neighbors generated at all
             event = "deadlock_restart"
@@ -253,9 +255,15 @@ def apply_perturbation(problem, routes, operators, operator_percentages, moves, 
 
 
 def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_count, impr_att, impr_app, start, current, best, sel_mode, emit_func):
+    event_label = event
+    if impr_app:
+        event_label = f"{event}|impr_applied"
+    elif impr_att:
+        event_label = f"{event}|impr_checked"
+
     move_key = list(chosen.move_key) if chosen else []
     emit_func({
-        "iteration": it, "event": event, "move_key": move_key,
+        "iteration": it, "event": event_label, "move_key": move_key,
         "current_cost": current_cost, "best_cost": best_cost,
         "candidate_count": cand_count, "tabu_size": len(tabu),
         "active_tabu_tenure": tenure, "selection_mode": sel_mode,
@@ -307,9 +315,29 @@ def run_tabu_from_method(
             event = payload.get("event", "-")
             current_cost = payload.get("current_cost")
             best_cost = payload.get("best_cost")
+            candidate_count = payload.get("candidate_count")
+            tabu_size = payload.get("tabu_size")
+            active_tenure = payload.get("active_tabu_tenure")
+            selection_mode = payload.get("selection_mode", "-")
+            elapsed_sec = payload.get("elapsed_sec")
+            move_key = payload.get("move_key")
+
+            move_name = "-"
+            if isinstance(move_key, list) and move_key:
+                move_name = str(move_key[0])
+
+            current_text = f"{current_cost:.5f}" if isinstance(current_cost, (int, float)) else "-"
+            best_text = f"{best_cost:.5f}" if isinstance(best_cost, (int, float)) else "-"
+            cand_text = str(candidate_count) if isinstance(candidate_count, int) else "-"
+            tabu_text = str(tabu_size) if isinstance(tabu_size, int) else "-"
+            tenure_text = str(active_tenure) if isinstance(active_tenure, int) else "-"
+            elapsed_text = f"{elapsed_sec:.2f}s" if isinstance(elapsed_sec, (int, float)) else "-"
+
             print(
-                f"[it={it:>4}] event={event:<28} "
-                f"current={current_cost:.5f} best={best_cost:.5f}"
+                f"[it={it:>4}] event={event:<24} move={move_name:<18} "
+                f"current={current_text:<12} best={best_text:<12} "
+                f"cand={cand_text:<5} tabu={tabu_text:<5} tenure={tenure_text:<4} "
+                f"sel={selection_mode:<22} t={elapsed_text}"
             )
         if iteration_callback:
             iteration_callback(payload)
