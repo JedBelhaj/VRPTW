@@ -21,68 +21,6 @@ DEFAULT_OPERATOR_PERCENTAGES = {
 EPS = 1e-6
 
 
-def _normalize_undirected_edge(edge):
-    if not (isinstance(edge, tuple) and len(edge) == 2):
-        return None
-    return (min(edge[0], edge[1]), max(edge[0], edge[1]))
-
-
-def _normalize_edge_pair(edge_pair):
-    if not (isinstance(edge_pair, tuple) and len(edge_pair) == 2):
-        return None
-    e1 = _normalize_undirected_edge(edge_pair[0])
-    e2 = _normalize_undirected_edge(edge_pair[1])
-    if e1 is None or e2 is None:
-        return None
-    return tuple(sorted((e1, e2)))
-
-
-def normalize_move_key(move_key):
-    """Builds a stable, less-fragmented tabu key for move memory."""
-    if not move_key:
-        return ("noop",)
-
-    operator = move_key[0]
-
-    if operator == "relocate" and len(move_key) >= 2:
-        # Customer-centric tabu avoids route-position overfitting.
-        return ("relocate", move_key[1])
-
-    if operator == "swap" and len(move_key) >= 3:
-        c1, c2 = move_key[1], move_key[2]
-        return ("swap", min(c1, c2), max(c1, c2))
-
-
-    if operator == "two_opt_intra" and len(move_key) >= 2:
-        edge_pair = _normalize_edge_pair(move_key[1])
-        if edge_pair is not None:
-            return ("two_opt_intra",) + edge_pair
-        if len(move_key) >= 4:
-            return ("two_opt_intra", move_key[1], move_key[2], move_key[3])
-
-    if operator == "two_opt_inter" and len(move_key) >= 2:
-        edge_pair = _normalize_edge_pair(move_key[1])
-        if edge_pair is not None:
-            return ("two_opt_inter",) + edge_pair
-        if len(move_key) >= 5:
-            r1, r2, i, j = move_key[1], move_key[2], move_key[3], move_key[4]
-            if r1 <= r2:
-                return ("two_opt_inter", r1, r2, i, j)
-            return ("two_opt_inter", r2, r1, j, i)
-
-    if operator == "or_opt" and len(move_key) >= 2:
-        chain = tuple(sorted(move_key[1])) if isinstance(move_key[1], tuple) else (move_key[1],)
-        return ("or_opt",) + chain
-
-    if operator == "cross_exchange" and len(move_key) >= 3:
-        seg1 = tuple(move_key[1]) if isinstance(move_key[1], tuple) else (move_key[1],)
-        seg2 = tuple(move_key[2]) if isinstance(move_key[2], tuple) else (move_key[2],)
-        flat = tuple(sorted(seg1 + seg2))
-        return ("cross_exchange",) + flat
-
-    return tuple(move_key)
-
-
 def format_move_details(move_key):
     if not move_key:
         return "-"
@@ -105,6 +43,14 @@ def format_move_details(move_key):
         )
 
     return operator
+
+
+def solution_arcs(routes):
+    arcs = set()
+    for route in routes:
+        for idx in range(len(route) - 1):
+            arcs.add((route[idx], route[idx + 1]))
+    return arcs
 
 
 def tabu_search(
@@ -137,7 +83,8 @@ def tabu_search(
     best = clone_routes(current)
     best_cost = current_cost
 
-    tabu = {}  # Stores move_key: iteration_it_expires
+    # Arc-based tabu: stores broken directed arcs as arc -> iteration_it_expires.
+    tabu_arcs = {}
     no_improve = 0
     customer_count = len(problem.customer_ids)
     adaptive_tenure_floor = max(20, customer_count // 5)
@@ -166,7 +113,7 @@ def tabu_search(
         "iteration": 0, "event": "start", "current_cost": current_cost,
         "best_cost": best_cost, "operators": operators,
         "active_tabu_tenure": active_tabu_tenure, "elapsed_sec": 0.0,
-        "candidate_count": 0, "tabu_size": len(tabu), "selection_mode": "start",
+        "candidate_count": 0, "tabu_size": len(tabu_arcs), "selection_mode": "start",
         "periodic_improvement_attempted": False,
         "periodic_improvement_applied": False,
         "current_routes": clone_routes(current), "best_routes": clone_routes(best),
@@ -191,8 +138,10 @@ def tabu_search(
 
         admissible = []
         for cand in candidates:
-            tabu_key = normalize_move_key(cand.move_key)
-            is_tabu = tabu.get(tabu_key, -1) >= it
+            cand_arcs = solution_arcs(cand.routes)
+            tabu_hits = [arc for arc in cand_arcs if tabu_arcs.get(arc, -1) >= it]
+            cand._tabu_hits = tabu_hits
+            is_tabu = bool(tabu_hits)
             can_aspire = aspiration and cand.objective < (best_cost - EPS)
             if not is_tabu or can_aspire:
                 admissible.append(cand)
@@ -210,7 +159,13 @@ def tabu_search(
         elif candidates:
             # FALLBACK: If all moves are Tabu, pick the one that expires SOONEST (Least Tabu)
             selection_mode = "least_tabu_fallback"
-            chosen = min(candidates, key=lambda c: tabu.get(normalize_move_key(c.move_key), 0))
+            chosen = min(
+                candidates,
+                key=lambda c: (
+                    len(getattr(c, "_tabu_hits", [])),
+                    max((tabu_arcs.get(arc, -1) for arc in getattr(c, "_tabu_hits", [])), default=-1),
+                ),
+            )
 
         # Decide upfront whether intensification will fire this iteration so we
         # don't waste a tabu slot on a move we're about to throw away.
@@ -221,13 +176,17 @@ def tabu_search(
 
         # 2. Apply Move
         if chosen:
+            previous_arcs = solution_arcs(current)
             current = chosen.routes
             current_cost = chosen.objective
 
             # Skip tabu insertion if intensification will discard this move.
             if not intensification_due:
-                tabu_key = normalize_move_key(chosen.move_key)
-                tabu[tabu_key] = it + active_tabu_tenure
+                current_arcs = solution_arcs(current)
+                broken_arcs = previous_arcs - current_arcs
+                expires_at = it + active_tabu_tenure
+                for arc in broken_arcs:
+                    tabu_arcs[arc] = expires_at
 
             if current_cost < (best_cost - EPS):
                 best, best_cost = clone_routes(current), current_cost
@@ -295,16 +254,14 @@ def tabu_search(
         ):
             current, current_cost = clone_routes(best), best_cost
             event = "intensification"
-            # Clear tabu memory on intensification: we're restarting from best,
-            # so prior move bans no longer reflect meaningful history.
-            tabu.clear()
+            # Keep tabu memory on intensification to avoid replaying the same path.
 
         # Cleanup Tabu list every 100 iters to save memory
         if it % 100 == 0:
-            tabu = {k: v for k, v in tabu.items() if v >= it}
+            tabu_arcs = {k: v for k, v in tabu_arcs.items() if v >= it}
 
         emit_payload(
-            it, event, chosen, current_cost, best_cost, tabu,
+            it, event, chosen, current_cost, best_cost, tabu_arcs,
             active_tabu_tenure, len(candidates),
             periodic_improvement_attempted, periodic_improvement_applied,
             search_start, current, best, selection_mode, emit,
@@ -334,7 +291,7 @@ def apply_perturbation(problem, routes, operators, operator_percentages, moves, 
     return perturbed
 
 
-def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_count,
+def emit_payload(it, event, chosen, current_cost, best_cost, tabu_arcs, tenure, cand_count,
                  impr_att, impr_app, start, current, best, sel_mode, emit_func):
     event_label = event
     if impr_app:
@@ -347,7 +304,7 @@ def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_
         "iteration": it, "event": event_label, "move_key": move_key,
         "move_details": format_move_details(chosen.move_key) if chosen else "-",
         "current_cost": current_cost, "best_cost": best_cost,
-        "candidate_count": cand_count, "tabu_size": len(tabu),
+        "candidate_count": cand_count, "tabu_size": len(tabu_arcs),
         "active_tabu_tenure": tenure, "selection_mode": sel_mode,
         "periodic_improvement_attempted": impr_att,
         "periodic_improvement_applied": impr_app,
