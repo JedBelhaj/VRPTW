@@ -5,6 +5,8 @@ INSTANCE = "R201"
 TABU_START_METHOD = "solomon"
 TABU_ITERATIONS = 100
 TABU_TENURE = 20
+TABU_ENABLE_DYNAMIC_TENURE = True
+TABU_LIST_MAX_SIZE = None
 TABU_ASPIRATION = True
 TABU_DIVERSIFICATION_INTERVAL = 35
 TABU_INTENSIFICATION_INTERVAL = 15
@@ -31,6 +33,8 @@ def main():
         method=TABU_START_METHOD,
         iterations=TABU_ITERATIONS,
         tabu_tenure=TABU_TENURE,
+        enable_dynamic_tenure=TABU_ENABLE_DYNAMIC_TENURE,
+        max_tabu_list_size=TABU_LIST_MAX_SIZE,
         aspiration=TABU_ASPIRATION,
         diversification_interval=TABU_DIVERSIFICATION_INTERVAL,
         intensification_interval=TABU_INTENSIFICATION_INTERVAL,

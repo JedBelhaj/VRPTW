@@ -107,6 +107,18 @@ def format_move_details(move_key):
     return operator
 
 
+def _trim_tabu_memory(tabu_memory, current_iteration, max_size):
+    if max_size is None or len(tabu_memory) <= max_size:
+        return tabu_memory
+
+    # Drop expired entries first, then evict oldest insertions if still oversized.
+    trimmed = {k: v for k, v in tabu_memory.items() if v >= current_iteration}
+    while len(trimmed) > max_size:
+        oldest_key = next(iter(trimmed))
+        del trimmed[oldest_key]
+    return trimmed
+
+
 def tabu_search(
     problem,
     initial_routes,
@@ -121,6 +133,8 @@ def tabu_search(
     iteration_callback=None,
     tenure_increase_step=2,
     max_tabu_tenure=None,
+    enable_dynamic_tenure=True,
+    max_tabu_list_size=None,
     stagnation_top_k=5,
     perturbation_moves=7,
     enable_improvement_operator=True,
@@ -131,18 +145,22 @@ def tabu_search(
     rng = random.Random(seed)
     search_start = time.perf_counter()
 
-    # --- Initialization ---
     current = clean_routes(problem, clone_routes(initial_routes))
     current_cost = total_distance(problem, current)
     best = clone_routes(current)
     best_cost = current_cost
 
-    tabu = {}  # Stores move_key: iteration_it_expires
+    tabu = {}
     no_improve = 0
     customer_count = len(problem.customer_ids)
     adaptive_tenure_floor = max(20, customer_count // 5)
     base_tabu_tenure = max(1, tabu_tenure, adaptive_tenure_floor)
     active_tabu_tenure = base_tabu_tenure
+    max_tabu_list_size = (
+        max(1, int(max_tabu_list_size))
+        if max_tabu_list_size is not None
+        else None
+    )
 
     total_neighbors = max(1, int(total_neighbors))
     operator_percentages = operator_percentages or DEFAULT_OPERATOR_PERCENTAGES
@@ -161,7 +179,6 @@ def tabu_search(
         if iteration_callback:
             iteration_callback(payload)
 
-    # Initial Progress Emit
     emit({
         "iteration": 0, "event": "start", "current_cost": current_cost,
         "best_cost": best_cost, "operators": operators,
@@ -186,7 +203,6 @@ def tabu_search(
             operator_percentages=operator_percentages,
         )
 
-        # Ensure candidates are sorted by objective (Best to Worst)
         candidates.sort(key=lambda x: x.objective)
 
         admissible = []
@@ -208,40 +224,35 @@ def tabu_search(
             else:
                 chosen = admissible[0]
         elif candidates:
-            # FALLBACK: If all moves are Tabu, pick the one that expires SOONEST (Least Tabu)
             selection_mode = "least_tabu_fallback"
             chosen = min(candidates, key=lambda c: tabu.get(normalize_move_key(c.move_key), 0))
 
-        # Decide upfront whether intensification will fire this iteration so we
-        # don't waste a tabu slot on a move we're about to throw away.
         intensification_due = (
             intensification_interval > 0
             and it % intensification_interval == 0
         )
 
-        # 2. Apply Move
         if chosen:
             current = chosen.routes
             current_cost = chosen.objective
 
-            # Skip tabu insertion if intensification will discard this move.
             if not intensification_due:
                 tabu_key = normalize_move_key(chosen.move_key)
                 tabu[tabu_key] = it + active_tabu_tenure
+                tabu = _trim_tabu_memory(tabu, it, max_tabu_list_size)
 
             if current_cost < (best_cost - EPS):
                 best, best_cost = clone_routes(current), current_cost
                 no_improve = 0
-                active_tabu_tenure = base_tabu_tenure
+                if enable_dynamic_tenure:
+                    active_tabu_tenure = base_tabu_tenure
                 event = "improvement"
             else:
                 no_improve += 1
                 event = "move"
-                # Dynamic Tenure: Increase if stagnating
-                if no_improve >= stagnation_trigger:
+                if enable_dynamic_tenure and no_improve >= stagnation_trigger:
                     active_tabu_tenure = min(max_tenure, active_tabu_tenure + tenure_increase_step)
 
-            # 3. Post-move Heavy Improvement (Regret Reinsertion)
             if enable_improvement_operator and improvement_interval > 0 and it % improvement_interval == 0:
                 periodic_improvement_attempted = True
                 improved_routes, improved = destroy_smallest_route_regret_reinsert(
@@ -255,19 +266,18 @@ def tabu_search(
                         if current_cost < (best_cost - EPS):
                             best, best_cost = clone_routes(current), current_cost
                             no_improve = 0
-                            active_tabu_tenure = base_tabu_tenure
+                            if enable_dynamic_tenure:
+                                active_tabu_tenure = base_tabu_tenure
                             event = "improvement_post_move"
                         elif event != "improvement":
                             event = "post_move_refine"
         else:
-            # Extreme case: No neighbors generated at all
             event = "deadlock_restart"
             methods = get_initial_methods()
             current = clean_routes(problem, methods["random"](problem))
             current_cost = total_distance(problem, current)
             no_improve += 1
 
-        # 4. Diversification (Perturbation)
         if diversification_interval > 0 and no_improve >= diversification_interval:
             event = "diversification_perturbation"
             diversified_this_iter = True
@@ -285,21 +295,26 @@ def tabu_search(
             no_improve = 0
             active_tabu_tenure = base_tabu_tenure
 
-        # 5. Intensification (Return to Best)
-        # Don't overwrite an improvement, and don't undo a fresh perturbation.
         if (
             intensification_due
             and event != "improvement"
             and event != "improvement_post_move"
             and not diversified_this_iter
         ):
-            current, current_cost = clone_routes(best), best_cost
+            current = apply_perturbation(
+                problem,
+                clone_routes(best),
+                operators,
+                operator_percentages,
+                moves=2,
+                top_k_val=stagnation_top_k,
+                total_neighbors=total_neighbors,
+                rng=rng,
+            )
+            current_cost = total_distance(problem, current)
             event = "intensification"
-            # Clear tabu memory on intensification: we're restarting from best,
-            # so prior move bans no longer reflect meaningful history.
             tabu.clear()
 
-        # Cleanup Tabu list every 100 iters to save memory
         if it % 100 == 0:
             tabu = {k: v for k, v in tabu.items() if v >= it}
 
@@ -314,7 +329,6 @@ def tabu_search(
 
 
 def apply_perturbation(problem, routes, operators, operator_percentages, moves, top_k_val, total_neighbors, rng):
-    """Applies a series of random inter-route moves to jump out of local optima."""
     perturbed = clone_routes(routes)
     for _ in range(max(1, moves)):
         cands = generate_candidates(
@@ -326,7 +340,6 @@ def apply_perturbation(problem, routes, operators, operator_percentages, moves, 
         )
         if not cands:
             break
-        # Prefer inter-route moves for diversification
         inter = [c for c in cands if is_inter_route_move(c.move_key)]
         pool = inter if inter else cands
         top = max(1, min(top_k_val, len(pool)))
@@ -371,6 +384,8 @@ def run_tabu_from_method(
     iteration_callback=None,
     tenure_increase_step=2,
     max_tabu_tenure=None,
+    enable_dynamic_tenure=True,
+    max_tabu_list_size=None,
     stagnation_top_k=5,
     perturbation_moves=3,
     enable_improvement_operator=True,
@@ -441,6 +456,8 @@ def run_tabu_from_method(
         iteration_callback=_iteration_bridge,
         tenure_increase_step=tenure_increase_step,
         max_tabu_tenure=max_tabu_tenure,
+        enable_dynamic_tenure=enable_dynamic_tenure,
+        max_tabu_list_size=max_tabu_list_size,
         stagnation_top_k=stagnation_top_k,
         perturbation_moves=perturbation_moves,
         enable_improvement_operator=enable_improvement_operator,
