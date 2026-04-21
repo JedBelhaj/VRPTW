@@ -3,7 +3,7 @@ from heuristics.tabu_search import run_tabu_from_method as tabu_run_tabu_from_me
 # Single-instance run settings
 INSTANCE = "R201"
 TABU_START_METHOD = "solomon"
-TABU_ITERATIONS = 500
+TABU_ITERATIONS = 100
 TABU_TENURE = 20
 TABU_ASPIRATION = True
 TABU_DIVERSIFICATION_INTERVAL = 35

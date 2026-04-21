@@ -18,6 +18,25 @@ DEFAULT_OPERATOR_PERCENTAGES = {
 }
 
 
+EPS = 1e-6
+
+
+def _normalize_undirected_edge(edge):
+    if not (isinstance(edge, tuple) and len(edge) == 2):
+        return None
+    return (min(edge[0], edge[1]), max(edge[0], edge[1]))
+
+
+def _normalize_edge_pair(edge_pair):
+    if not (isinstance(edge_pair, tuple) and len(edge_pair) == 2):
+        return None
+    e1 = _normalize_undirected_edge(edge_pair[0])
+    e2 = _normalize_undirected_edge(edge_pair[1])
+    if e1 is None or e2 is None:
+        return None
+    return tuple(sorted((e1, e2)))
+
+
 def normalize_move_key(move_key):
     """Builds a stable, less-fragmented tabu key for move memory."""
     if not move_key:
@@ -26,19 +45,30 @@ def normalize_move_key(move_key):
     operator = move_key[0]
 
     if operator == "relocate" and len(move_key) >= 2:
-        # Customer-centric key avoids route-position overfitting.
+        # Customer-centric tabu avoids route-position overfitting.
         return ("relocate", move_key[1])
 
     if operator == "swap" and len(move_key) >= 3:
         c1, c2 = move_key[1], move_key[2]
         return ("swap", min(c1, c2), max(c1, c2))
 
-    if operator == "two_opt_intra" and len(move_key) >= 2:
-        return ("two_opt_intra", move_key[1])
 
-    if operator == "two_opt_inter" and len(move_key) >= 3:
-        r1, r2 = move_key[1], move_key[2]
-        return ("two_opt_inter", min(r1, r2), max(r1, r2))
+    if operator == "two_opt_intra" and len(move_key) >= 2:
+        edge_pair = _normalize_edge_pair(move_key[1])
+        if edge_pair is not None:
+            return ("two_opt_intra",) + edge_pair
+        if len(move_key) >= 4:
+            return ("two_opt_intra", move_key[1], move_key[2], move_key[3])
+
+    if operator == "two_opt_inter" and len(move_key) >= 2:
+        edge_pair = _normalize_edge_pair(move_key[1])
+        if edge_pair is not None:
+            return ("two_opt_inter",) + edge_pair
+        if len(move_key) >= 5:
+            r1, r2, i, j = move_key[1], move_key[2], move_key[3], move_key[4]
+            if r1 <= r2:
+                return ("two_opt_inter", r1, r2, i, j)
+            return ("two_opt_inter", r2, r1, j, i)
 
     if operator == "or_opt" and len(move_key) >= 2:
         chain = tuple(sorted(move_key[1])) if isinstance(move_key[1], tuple) else (move_key[1],)
@@ -51,6 +81,30 @@ def normalize_move_key(move_key):
         return ("cross_exchange",) + flat
 
     return tuple(move_key)
+
+
+def format_move_details(move_key):
+    if not move_key:
+        return "-"
+
+    operator = str(move_key[0])
+
+    if operator == "two_opt_inter" and len(move_key) >= 7:
+        return (
+            f"two_opt_inter(r1={move_key[2]}, r2={move_key[3]}, "
+            f"i={move_key[4]}, j={move_key[5]}, var={move_key[6]})"
+        )
+
+    if operator == "two_opt_intra" and len(move_key) >= 5:
+        return f"two_opt_intra(route={move_key[2]}, i={move_key[3]}, j={move_key[4]})"
+
+    if operator == "swap" and len(move_key) >= 7:
+        return (
+            f"swap(c1={move_key[1]}, c2={move_key[2]}, "
+            f"r1={move_key[3]}, r2={move_key[4]}, p1={move_key[5]}, p2={move_key[6]})"
+        )
+
+    return operator
 
 
 def tabu_search(
@@ -72,8 +126,9 @@ def tabu_search(
     enable_improvement_operator=True,
     improvement_interval=30,
     regret_k=2,
+    seed=None,
 ):
-    rng = random.Random()
+    rng = random.Random(seed)
     search_start = time.perf_counter()
 
     # --- Initialization ---
@@ -94,7 +149,7 @@ def tabu_search(
 
     adaptive_perturbation_floor = min(10, max(5, customer_count // 10))
     perturbation_moves = max(1, perturbation_moves, adaptive_perturbation_floor)
-    
+
     stagnation_trigger = diversification_interval // 2 if diversification_interval > 0 else 10
     max_tenure = max_tabu_tenure if max_tabu_tenure is not None else base_tabu_tenure * 4
 
@@ -120,6 +175,7 @@ def tabu_search(
     for it in range(1, iterations + 1):
         periodic_improvement_attempted = False
         periodic_improvement_applied = False
+        diversified_this_iter = False
 
         # 1. Neighborhood Search
         candidates = generate_candidates(
@@ -129,7 +185,7 @@ def tabu_search(
             enabled_operators=operators,
             operator_percentages=operator_percentages,
         )
-        
+
         # Ensure candidates are sorted by objective (Best to Worst)
         candidates.sort(key=lambda x: x.objective)
 
@@ -137,7 +193,7 @@ def tabu_search(
         for cand in candidates:
             tabu_key = normalize_move_key(cand.move_key)
             is_tabu = tabu.get(tabu_key, -1) >= it
-            can_aspire = aspiration and cand.objective < (best_cost - 1e-6) # Small epsilon for float comparison
+            can_aspire = aspiration and cand.objective < (best_cost - EPS)
             if not is_tabu or can_aspire:
                 admissible.append(cand)
 
@@ -155,16 +211,25 @@ def tabu_search(
             # FALLBACK: If all moves are Tabu, pick the one that expires SOONEST (Least Tabu)
             selection_mode = "least_tabu_fallback"
             chosen = min(candidates, key=lambda c: tabu.get(normalize_move_key(c.move_key), 0))
-        
+
+        # Decide upfront whether intensification will fire this iteration so we
+        # don't waste a tabu slot on a move we're about to throw away.
+        intensification_due = (
+            intensification_interval > 0
+            and it % intensification_interval == 0
+        )
+
         # 2. Apply Move
         if chosen:
             current = chosen.routes
             current_cost = chosen.objective
-            tabu_key = normalize_move_key(chosen.move_key)
-            tabu[tabu_key] = it + active_tabu_tenure
-            tabu_until = tabu[tabu_key]
-            
-            if current_cost < (best_cost - 1e-6):
+
+            # Skip tabu insertion if intensification will discard this move.
+            if not intensification_due:
+                tabu_key = normalize_move_key(chosen.move_key)
+                tabu[tabu_key] = it + active_tabu_tenure
+
+            if current_cost < (best_cost - EPS):
                 best, best_cost = clone_routes(current), current_cost
                 no_improve = 0
                 active_tabu_tenure = base_tabu_tenure
@@ -184,10 +249,10 @@ def tabu_search(
                 )
                 if improved:
                     improved_cost = total_distance(problem, improved_routes)
-                    if improved_cost < current_cost:
+                    if improved_cost < (current_cost - EPS):
                         periodic_improvement_applied = True
                         current, current_cost = improved_routes, improved_cost
-                        if current_cost < (best_cost - 1e-6):
+                        if current_cost < (best_cost - EPS):
                             best, best_cost = clone_routes(current), current_cost
                             no_improve = 0
                             active_tabu_tenure = base_tabu_tenure
@@ -201,11 +266,11 @@ def tabu_search(
             current = clean_routes(problem, methods["random"](problem))
             current_cost = total_distance(problem, current)
             no_improve += 1
-            tabu_until = None
 
         # 4. Diversification (Perturbation)
         if diversification_interval > 0 and no_improve >= diversification_interval:
             event = "diversification_perturbation"
+            diversified_this_iter = True
             current = apply_perturbation(
                 problem,
                 current,
@@ -221,15 +286,29 @@ def tabu_search(
             active_tabu_tenure = base_tabu_tenure
 
         # 5. Intensification (Return to Best)
-        if intensification_interval > 0 and it % intensification_interval == 0 and event != "improvement":
+        # Don't overwrite an improvement, and don't undo a fresh perturbation.
+        if (
+            intensification_due
+            and event != "improvement"
+            and event != "improvement_post_move"
+            and not diversified_this_iter
+        ):
             current, current_cost = clone_routes(best), best_cost
             event = "intensification"
+            # Clear tabu memory on intensification: we're restarting from best,
+            # so prior move bans no longer reflect meaningful history.
+            tabu.clear()
 
         # Cleanup Tabu list every 100 iters to save memory
         if it % 100 == 0:
             tabu = {k: v for k, v in tabu.items() if v >= it}
 
-        emit_payload(it, event, chosen, current_cost, best_cost, tabu, active_tabu_tenure, len(candidates), periodic_improvement_attempted, periodic_improvement_applied, search_start, current, best, selection_mode, emit)
+        emit_payload(
+            it, event, chosen, current_cost, best_cost, tabu,
+            active_tabu_tenure, len(candidates),
+            periodic_improvement_attempted, periodic_improvement_applied,
+            search_start, current, best, selection_mode, emit,
+        )
 
     return best, best_cost
 
@@ -245,7 +324,8 @@ def apply_perturbation(problem, routes, operators, operator_percentages, moves, 
             enabled_operators=operators,
             operator_percentages=operator_percentages,
         )
-        if not cands: break
+        if not cands:
+            break
         # Prefer inter-route moves for diversification
         inter = [c for c in cands if is_inter_route_move(c.move_key)]
         pool = inter if inter else cands
@@ -254,7 +334,8 @@ def apply_perturbation(problem, routes, operators, operator_percentages, moves, 
     return perturbed
 
 
-def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_count, impr_att, impr_app, start, current, best, sel_mode, emit_func):
+def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_count,
+                 impr_att, impr_app, start, current, best, sel_mode, emit_func):
     event_label = event
     if impr_app:
         event_label = f"{event}|impr_applied"
@@ -264,6 +345,7 @@ def emit_payload(it, event, chosen, current_cost, best_cost, tabu, tenure, cand_
     move_key = list(chosen.move_key) if chosen else []
     emit_func({
         "iteration": it, "event": event_label, "move_key": move_key,
+        "move_details": format_move_details(chosen.move_key) if chosen else "-",
         "current_cost": current_cost, "best_cost": best_cost,
         "candidate_count": cand_count, "tabu_size": len(tabu),
         "active_tabu_tenure": tenure, "selection_mode": sel_mode,
@@ -294,6 +376,7 @@ def run_tabu_from_method(
     enable_improvement_operator=True,
     improvement_interval=30,
     regret_k=2,
+    seed=None,
 ):
     """Runs an initial method + tabu search and returns a benchmark-style row."""
     methods = get_initial_methods()
@@ -321,9 +404,10 @@ def run_tabu_from_method(
             selection_mode = payload.get("selection_mode", "-")
             elapsed_sec = payload.get("elapsed_sec")
             move_key = payload.get("move_key")
+            move_details = payload.get("move_details", "-")
 
-            move_name = "-"
-            if isinstance(move_key, list) and move_key:
+            move_name = str(move_details) if isinstance(move_details, str) and move_details else "-"
+            if move_name == "-" and isinstance(move_key, list) and move_key:
                 move_name = str(move_key[0])
 
             current_text = f"{current_cost:.5f}" if isinstance(current_cost, (int, float)) else "-"
@@ -362,12 +446,15 @@ def run_tabu_from_method(
         enable_improvement_operator=enable_improvement_operator,
         improvement_interval=improvement_interval,
         regret_k=regret_k,
+        seed=seed,
     )
     tabu_elapsed = time.perf_counter() - tabu_start
 
     tabu_feasible, tabu_distance, tabu_message = evaluate_solution(problem, best_routes)
     final_distance = best_cost if tabu_feasible else float("inf")
-    final_message = tabu_message if tabu_feasible else tabu_message
+    final_message = tabu_message if tabu_feasible else (
+        f"infeasible final solution: {tabu_message}"
+    )
 
     return {
         "instance": problem.name,

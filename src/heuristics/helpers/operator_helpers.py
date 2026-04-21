@@ -23,7 +23,11 @@ def is_inter_route_move(move_key):
         return False
 
     operator = move_key[0]
-    if operator in ("swap", "two_opt_inter", "cross_exchange"):
+    if operator == "swap":
+        if len(move_key) >= 5:
+            return move_key[3] != move_key[4]
+        return True
+    if operator in ("two_opt_inter", "cross_exchange"):
         return True
     if operator in ("relocate", "or_opt") and len(move_key) >= 4:
         return move_key[2] != move_key[3]
